@@ -202,6 +202,11 @@ async function resolveRepositoryEntry(repoRoot, inputPath) {
   if (absolutePath !== root && !absolutePath.startsWith(root + path.sep)) {
     throw new Error(`Preview path must be inside the repository: ${inputPath}`);
   }
+  if (absolutePath !== root) {
+    // A leaf symlink is displayed as metadata; an ancestor symlink must never
+    // let a document read or write escape the repository.
+    assertInsideRoot(root, await realpath(path.dirname(absolutePath)), inputPath);
+  }
   const fileStat = await lstat(absolutePath);
   if (!fileStat.isFile() && !fileStat.isSymbolicLink() && !fileStat.isDirectory()) {
     throw new Error(`Preview path must point to a repository file: ${inputPath}`);

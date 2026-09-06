@@ -10293,6 +10293,7 @@ async function liveDocumentTargetFromHref(href) {
     const response = await fetch(apiUrl("/api/link-target", {
       file: state.currentDocument.path,
       target: href,
+      targetFormat: "markdown",
       locale: state.locale,
     }));
     const payload = await response.json().catch(() => ({ error: t("error.openTargetDocument") }));
@@ -10328,7 +10329,7 @@ function openGlanceDocumentTargetFromHref(href) {
   try {
     const url = new URL(String(href ?? "").trim(), window.location.origin);
     const file = url.searchParams.get("file") ?? "";
-    if (!/^https?:$/i.test(url.protocol) || !/\.mdx?$/i.test(file)) {
+    if (!/^https?:$/i.test(url.protocol) || url.pathname !== "/" || !/\.mdx?$/i.test(file)) {
       return null;
     }
     if (url.origin !== window.location.origin && !url.searchParams.has("repo")) {

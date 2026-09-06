@@ -7,6 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { BUILD_INFO } from "../build-info.mjs";
+import { decodeMarkdownLinkPath } from "../content/link-path.mjs";
 import { extractTitle, renderMarkdown } from "../content/markdown.mjs";
 import {
   datasetReferencesFromMarkdown,
@@ -865,6 +866,7 @@ async function handleRequest(request, response, context) {
         currentRepo: repo,
         file,
         rawTarget: requestUrl.searchParams.get("target") ?? "",
+        markdownTarget: requestUrl.searchParams.get("targetFormat") === "markdown",
         locale,
       }),
     );
@@ -1571,6 +1573,7 @@ async function linkTargetPayload({
   currentRepo,
   file,
   rawTarget,
+  markdownTarget = false,
   locale = "en",
 }) {
   const currentFile = await resolveOpenablePath(currentRepo.root, file);
@@ -1587,11 +1590,11 @@ async function linkTargetPayload({
     targetRepo.root,
     openGlanceTarget
       ? [repoRootDocumentInput(openGlanceTarget.file, locale)]
-      : documentLinkTargetInputs(currentRepo.root, currentFile.relativePath, rawTarget, locale),
+      : documentLinkTargetInputs(currentRepo.root, currentFile.relativePath, rawTarget, locale, { markdownTarget }),
     { locale },
   );
   const source = await readFile(targetDocument.absolutePath, "utf8");
-  const suffix = openGlanceTarget?.suffix ?? "";
+  const suffix = openGlanceTarget?.suffix ?? (markdownTarget ? splitTargetSuffix(rawTarget)[1] : "");
   const href = documentLinkHref(currentFile.relativePath, targetDocument.relativePath, suffix);
   const title = extractTitle(source, targetDocument.relativePath);
   return {
@@ -1615,7 +1618,7 @@ async function resolveFirstPreviewPath(repoRoot, candidates, { locale = "en" } =
   throw error;
 }
 
-function documentLinkTargetInputs(repoRoot, currentRelativePath, rawTarget, locale = "en") {
+function documentLinkTargetInputs(repoRoot, currentRelativePath, rawTarget, locale = "en", { markdownTarget = false } = {}) {
   const target = String(rawTarget ?? "").trim();
   if (!target) {
     const error = new Error(localizedServerMessage(locale, "linkTargetRequired"));
@@ -1623,7 +1626,8 @@ function documentLinkTargetInputs(repoRoot, currentRelativePath, rawTarget, loca
     throw error;
   }
 
-  const [pathPart] = splitTargetSuffix(target);
+  const [rawPath] = splitTargetSuffix(target);
+  const pathPart = markdownTarget ? decodeMarkdownLinkPath(rawPath) : rawPath;
   const normalized = pathPart.replaceAll("\\", "/");
   if (path.isAbsolute(pathPart)) {
     const relative = path.relative(repoRoot, pathPart);
@@ -1654,7 +1658,7 @@ function openGlanceDocumentUrlTarget(rawTarget) {
   try {
     const url = new URL(String(rawTarget ?? "").trim());
     const file = url.searchParams.get("file") ?? "";
-    if (!/^https?:$/i.test(url.protocol) || !/\.mdx?$/i.test(file)) {
+    if (!/^https?:$/i.test(url.protocol) || url.pathname !== "/" || !/\.mdx?$/i.test(file)) {
       return null;
     }
 
@@ -1690,9 +1694,8 @@ function documentLinkHref(currentRelativePath, targetRelativePath, suffix = "") 
   const isNearby = upLevels === 0
     ? downLevels <= 2
     : upLevels <= 1 && downLevels <= 2;
-  return isNearby
-    ? encodeURI(normalizedRelative) + suffix
-    : `/${encodeURI(targetRelativePath)}${suffix}`;
+  const linkPath = isNearby ? normalizedRelative : `/${targetRelativePath}`;
+  return linkPath.split("/").map(encodeURIComponent).join("/") + suffix;
 }
 
 function splitTargetSuffix(target) {

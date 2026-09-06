@@ -121,6 +121,14 @@ test("liveInlineRangesForLine marks source syntax separately from readable conte
   );
 });
 
+test("Live link toolbars open angle-wrapped destinations without changing their source ranges", () => {
+  const source = "See [report](<notes/课程%20详情.md?view=full#L5>) now";
+  const link = liveMarkdownLinksForLine(source)[0];
+  assert.equal(link.href, "notes/课程%20详情.md?view=full#L5");
+  assert.equal(source.slice(link.from, link.to), "[report](<notes/课程%20详情.md?view=full#L5>)");
+  assert.equal(source.slice(link.destinationFrom, link.destinationTo), "<notes/课程%20详情.md?view=full#L5>");
+});
+
 test("liveMarkdownLinksForLine returns source ranges for Live link toolbars", () => {
   const links = liveMarkdownLinksForLine("See [report](docs/report.md) now");
 

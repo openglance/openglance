@@ -1,6 +1,7 @@
 import MarkdownIt from "markdown-it";
 
 import { createTranslator } from "../../public/i18n.js";
+import { decodeMarkdownLinkPath } from "./link-path.mjs";
 import { controlledTableStyleSpanAt } from "./markdown-table.mjs";
 import { mdxLiteBlockRule, renderMdxLiteComponent } from "./mdx-lite.mjs";
 import {
@@ -887,8 +888,7 @@ function transformDestination(rawDestination, options, kind) {
     return destination;
   }
 
-  const resolved = resolveRelativeRepoLink(options.currentFile, destination);
-  const [pathPart, suffix = ""] = splitSuffix(resolved);
+  const { file: pathPart, suffix } = resolveRelativeRepoLink(options.currentFile, destination);
 
   if (kind === "link" && isMarkdownPath(pathPart)) {
     return withRepositoryQuery("/", {
@@ -911,7 +911,13 @@ function withRepositoryQuery(pathname, { repo, file, suffix = "" }) {
     query.set("repo", repo);
   }
   query.set("file", file);
-  return `${pathname}?${query.toString()}${suffix}`;
+  const hashIndex = suffix.indexOf("#");
+  const hash = hashIndex < 0 ? "" : suffix.slice(hashIndex);
+  const destinationQuery = hashIndex < 0 ? suffix : suffix.slice(0, hashIndex);
+  for (const [key, value] of new URLSearchParams(destinationQuery)) {
+    if (key !== "repo" && key !== "file") query.append(key, value);
+  }
+  return `${pathname}?${query.toString()}${hash}`;
 }
 
 function isOpenGlanceDocumentDestination(destination) {
@@ -942,25 +948,20 @@ function sanitizeOpenGlanceDocumentDestination(destination) {
 }
 
 function resolveRelativeRepoLink(sourceRelativePath, destination) {
-  if (isExternalDestination(destination) || destination.startsWith("#")) {
-    return destination;
-  }
-
   const [pathPart, suffix = ""] = splitDestinationSuffix(destination);
   if (!pathPart) {
-    return destination;
+    return { file: sourceRelativePath, suffix };
   }
 
-  const decodedPath = decodeURI(pathPart);
+  const decodedPath = decodeMarkdownLinkPath(pathPart);
   const sourceDir = posixDirname(sourceRelativePath);
   const resolved = decodedPath.startsWith("/")
     ? posixNormalize(decodedPath.slice(1))
     : posixNormalize(`${sourceDir}/${decodedPath}`);
-  if (resolved.startsWith("../") || resolved === "..") {
-    return destination;
-  }
 
-  return encodeURI(resolved) + suffix;
+  // Keep the path separate from its suffix and unencoded until URLSearchParams
+  // writes it. The service still enforces repository containment for every read.
+  return { file: resolved, suffix };
 }
 
 function isMarkdownPath(value) {
@@ -992,17 +993,6 @@ function splitDestinationSuffix(destination) {
   return [destination.slice(0, splitIndex), destination.slice(splitIndex)];
 }
 
-function splitSuffix(destination) {
-  const hashIndex = destination.indexOf("#");
-  const queryIndex = destination.indexOf("?");
-  const indexes = [hashIndex, queryIndex].filter((index) => index >= 0);
-  if (indexes.length === 0) {
-    return [destination, ""];
-  }
-  const splitIndex = Math.min(...indexes);
-  return [destination.slice(0, splitIndex), destination.slice(splitIndex)];
-}
-
 function posixBasename(value) {
   const normalized = String(value ?? "").replace(/\/+$/g, "");
   const slashIndex = normalized.lastIndexOf("/");
@@ -1016,7 +1006,7 @@ function posixDirname(value) {
 }
 
 function posixExtname(value) {
-  const pathPart = String(value ?? "").split(/[?#]/, 1)[0];
+  const pathPart = String(value ?? "");
   const slashIndex = pathPart.lastIndexOf("/");
   const dotIndex = pathPart.lastIndexOf(".");
   return dotIndex > slashIndex ? pathPart.slice(dotIndex) : "";
