@@ -339,8 +339,19 @@ background action.
 
 ![Sync showing one unpublished file and the explicit Sync and publish action](assets/user-guide/sync-and-publish.jpg)
 
-Sync is deliberately repository-wide. It does not stage selected files or ask for a commit message.
-Before publishing, make sure every file shown in Sync belongs in the next shared revision.
+Sync is deliberately repository-wide. Before publishing, make sure every file shown in Sync belongs
+in the next shared revision. **Change summary (optional)** accepts a short description; the first line
+becomes the commit title and subsequent lines become its body. The draft stays available after a failed
+publication and clears after success.
+**Sync and copy** when sharing an unpublished document uses the same summary.
+
+Leave the field blank to generate a local description using change types and document titles. For
+existing Markdown or MDX documents, OpenGlance compares the committed and staged versions and includes
+only newly added or edited `change_log.summary` values. Unchanged or reordered history is not reused;
+the newest date alone does not identify this edit. New documents use their title because any embedded
+history may have been copied from elsewhere. This does not require an AI service or upload document
+contents. Long descriptions are shortened and large change sets show a bounded set of details; Git
+retains the complete file list.
 
 When an external AI agent edits the same local working directory, its files appear in Sync like any
 other local changes. Open the affected documents to read the current result. OpenGlance currently shows

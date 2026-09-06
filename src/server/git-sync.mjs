@@ -10,6 +10,7 @@ import {
   runExternalCommand,
 } from "./external-command.mjs";
 import { createTranslator } from "../../public/i18n.js";
+import { createSyncCommitMessage } from "./git-commit-message.mjs";
 
 const IN_PROGRESS_GIT_REFS = new Map([
   ["MERGE_HEAD", "merge"],
@@ -307,13 +308,17 @@ export async function syncSelectedFiles({
       });
     }
 
-    const commitMessage = commitMessageForContext(context);
+    const commitMessage = await createSyncCommitMessage({
+      ...context,
+      files: stagePaths,
+      changes,
+      gitRunner,
+    });
     const commitArgs = [
       "commit",
       "-m",
       commitMessage.subject,
-      "-m",
-      commitMessage.body,
+      ...(commitMessage.body ? ["-m", commitMessage.body] : []),
       ...(allChanges ? [] : ["--", ...stagePaths]),
     ];
     await runStep(context, "commit", gitRunner, commitArgs);
@@ -816,25 +821,6 @@ export function buildGitSyncAgentPrompt({
     translate("prompt.goal2"),
     translate("prompt.goal3", { branch: repo.branch }),
   ].join("\n");
-}
-
-function commitMessageForContext({ files, note }) {
-  const noteLines = String(note ?? "").split(/\r?\n/);
-  const firstLine = noteLines.shift()?.trim() ?? "";
-  const subject = firstLine ? firstLine.slice(0, 72) : "Sync OpenGlance files";
-  const bodyParts = [];
-  if (firstLine.length > subject.length) {
-    bodyParts.push(firstLine);
-  }
-  const remainingNote = noteLines.join("\n").trim();
-  if (remainingNote) {
-    bodyParts.push(remainingNote);
-  }
-  bodyParts.push(["Files:", ...files.map((file) => `- ${file}`)].join("\n"));
-  return {
-    subject,
-    body: bodyParts.join("\n\n"),
-  };
 }
 
 function normalizeSelectedFiles(files) {

@@ -1883,7 +1883,11 @@ test("share-link publish API commits, pushes, verifies origin/main, and returns 
   try {
     const response = await fetch(
       `${baseUrl}/api/share-link?repo=${repository.id}&file=sample.md`,
-      { method: "POST" },
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ note: "Explain the sharing workflow" }),
+      },
     );
     const payload = await response.json();
 
@@ -1891,6 +1895,7 @@ test("share-link publish API commits, pushes, verifies origin/main, and returns 
     assert.equal(payload.ok, true);
     assert.equal(payload.published, true);
     assert.equal(new URL(payload.url).searchParams.get("rev"), publishedHead);
+    assert.equal(calls.find((args) => args[0] === "commit")[2], "Explain the sharing workflow");
     const pushIndex = calls.findIndex((args) => args[0] === "push");
     assert.ok(pushIndex >= 0);
     assert.deepEqual(calls.slice(pushIndex, pushIndex + 3), [

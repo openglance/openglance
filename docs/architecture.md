@@ -529,6 +529,17 @@ remote-tracking ref:
 - **Sync and publish** remains the explicit up action. It includes any required remote integration, then
   commits and pushes all local changes.
 
+Sync accepts an optional multiline change summary. Its first line becomes the commit subject and the
+remaining text becomes the body; a successful publication clears the in-memory draft for that worktree,
+while a failed publication retains it. Without a note, `git-commit-message.mjs` generates a localized
+description from the staged change types and document titles. It reads bounded Markdown/MDX blobs by
+object ID from the staged diff, never from newer working-tree content. Only `change_log.summary` values
+added or changed relative to the previous blob may supplement the description. Sorting history or
+changing its date does not make an unchanged summary current. New files have no comparison baseline,
+so embedded history is not used. Unsupported metadata, binary content, symlinks, and oversized blobs
+fall back to file descriptions. This local helper has no model or network dependency and also serves
+publication through share links.
+
 For a dirty down-only merge, OpenGlance freezes the complete click-time workspace with an alternate Git
 index and an immutable snapshot commit. It merges that snapshot with the fetched remote commit in Git's
 object layer. Only a conflict-free result may be applied to the real files, and a final tree comparison

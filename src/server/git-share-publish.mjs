@@ -49,6 +49,7 @@ const GIT_SHARE_PUBLISH_MESSAGES = Object.freeze({
 export async function publishOpenGlanceShareLink({
   repo,
   file,
+  note = "",
   language = "en",
   locale,
   gitRunner,
@@ -89,6 +90,7 @@ export async function publishOpenGlanceShareLink({
     publication = changes.length > 0
       ? await syncChanges({
         repo,
+        note,
         allChanges: true,
         gitRunner,
         ...localizationOptions,

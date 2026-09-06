@@ -198,8 +198,6 @@ test("syncSelectedFiles fetches first, commits every selected file type, rebases
       "commit",
       "-m",
       "补充发布说明",
-      "-m",
-      "Files:\n- docs/changed.md\n- assets/slides.pptx",
       "--",
       ...files,
     ],

@@ -365,9 +365,11 @@ async function handleRequest(request, response, context) {
     try {
       if (request.method === "POST") {
         requireEditableRequest(request, context, repo);
+        const body = isJsonRequest(request) ? await readJsonRequest(request) : {};
         const payload = await publishOpenGlanceShareLink({
           repo,
           file,
+          note: body.note,
           locale,
           gitRunner: context.gitRunner,
         });

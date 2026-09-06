@@ -338,6 +338,10 @@
                 <span data-i18n="git.localChanges">本地改动</span>
                 <span id="git-change-label">没有未发布修改</span>
               </span>
+              <label id="git-sync-note-wrap" class="git-sync-note" hidden>
+                <span data-i18n="sync.noteLabel">本次修改摘要（选填）</span>
+                <textarea id="git-sync-note" rows="2" placeholder="简单说说改了什么；留空自动生成" data-i18n-placeholder="sync.notePlaceholder"></textarea>
+              </label>
               <div class="git-sync-actions">
                 <button id="git-merge-remote" type="button" data-i18n="action.mergeRemote" hidden>合并远端修改</button>
                 <button id="git-sync-open" class="is-primary" type="button" data-i18n="action.syncAndPublish">同步并发布</button>

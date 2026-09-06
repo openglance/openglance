@@ -28,6 +28,9 @@ smoke-live-table-mac:
 smoke-document-changes-mac:
 	node scripts/smoke-document-changes-mac.mjs
 
+smoke-commit-summary-mac:
+	node scripts/smoke-commit-summary-mac.mjs
+
 verify-dev-handoff-mac:
 	npm run verify:dev-handoff:mac
 
@@ -76,4 +79,4 @@ stage-updates-win:
 publish-updates-win:
 	$(win-release-env) node scripts/release-windows.mjs publish-updates
 
-.PHONY: package-mac install-dev-mac smoke-dev-mac smoke-tree-tooltip-mac smoke-remote-sync-mac smoke-live-table-mac smoke-document-changes-mac verify-dev-handoff-mac check-release-prereqs sign-mac dmg-mac notarize-mac staple-mac zip-mac verify-release-mac release-mac stage-updates-mac publish-updates-mac package-win release-win stage-updates-win publish-updates-win
+.PHONY: package-mac install-dev-mac smoke-dev-mac smoke-tree-tooltip-mac smoke-remote-sync-mac smoke-live-table-mac smoke-document-changes-mac smoke-commit-summary-mac verify-dev-handoff-mac check-release-prereqs sign-mac dmg-mac notarize-mac staple-mac zip-mac verify-release-mac release-mac stage-updates-mac publish-updates-mac package-win release-win stage-updates-win publish-updates-win

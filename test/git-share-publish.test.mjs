@@ -29,13 +29,15 @@ test("share publication can retry a failed push after the document was committed
   const options = {
     repo: REPO,
     file: "docs/report.md",
+    note: "Explain the report changes",
     createShareLink,
     readStatus: async () => ({
       changes: dirty
         ? [{ path: "docs/report.md", status: "modified", rawStatus: " M" }]
         : [],
     }),
-    syncChanges: async () => {
+    syncChanges: async (options) => {
+      assert.equal(options.note, "Explain the report changes");
       syncCalls += 1;
       dirty = false;
       return {

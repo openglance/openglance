@@ -110,6 +110,8 @@ part of that repository, but the repository's operational role is broader than h
 5. **Keep the shared repository current.** OpenGlance can bring in remote changes while preserving
    unfinished local edits. **Sync and publish** commits and pushes intentionally; **Copy share link**
    returns a versioned link only after verifying the published revision.
+   Add an optional change summary in Sync, or leave it blank for a local summary of changed files and
+   newly added or edited document changelog summaries.
 
 ## Local-first files, links that open like online documents
 

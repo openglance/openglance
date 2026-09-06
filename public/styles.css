@@ -1130,6 +1130,36 @@ input {
   display: none;
 }
 
+.git-sync-note {
+  display: grid;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.git-sync-note[hidden] {
+  display: none;
+}
+
+.git-sync-note textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 58px;
+  max-height: 140px;
+  resize: vertical;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  padding: 7px 8px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  line-height: 1.5;
+}
+
+.git-sync-note textarea::placeholder {
+  color: var(--muted);
+}
+
 .git-change-toolbar button {
   width: 100%;
   min-width: 0;
