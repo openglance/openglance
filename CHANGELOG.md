@@ -4,6 +4,16 @@ OpenGlance follows Semantic Versioning for its shared app version. Git tags iden
 official public artifacts, signatures, checksums, and platform availability are authoritative only on
 the [OpenGlance download page](https://gitleaf.mangofuture.com/download).
 
+## 3.1.1 — 2026-09-06 (internal release)
+
+### Fixed
+
+- Restored local document links, images, and assets whose paths contain Chinese characters, spaces,
+  or literal percent signs, while preserving encoded destinations, query parameters, and fragments.
+- Corrected Live link opening for encoded and angle-wrapped Markdown destinations without changing
+  their source text or selecting a different worktree.
+- Rejected document paths that escape the repository through a parent-directory symbolic link.
+
 ## 3.1.0 — 2026-09-04 (internal release)
 
 ### Added
