@@ -4,6 +4,17 @@ OpenGlance follows Semantic Versioning for its shared app version. Git tags iden
 official public artifacts, signatures, checksums, and platform availability are authoritative only on
 the [OpenGlance download page](https://gitleaf.mangofuture.com/download).
 
+## 3.2.0 — 2026-09-06 (internal release)
+
+### Added
+
+- Added an optional editable change summary to Sync and unpublished-document sharing. Its first line
+  becomes the commit subject, its remaining lines become the body, and the draft is preserved when
+  publication fails.
+- Added bounded local commit-summary generation when the field is empty, using staged change types,
+  document titles, and newly added or edited `change_log.summary` values without an AI service or
+  document-content upload.
+
 ## 3.1.1 — 2026-09-06 (internal release)
 
 ### Fixed
