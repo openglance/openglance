@@ -24,6 +24,7 @@ import {
   liveVisualRangesForLine,
   liveMdxComponentForLine,
   liveMdxTargetIsEmbeddedViewControl,
+  liveMarkdownDecorationsNeedRebuild,
   minimalDocumentChange,
   nextLiveEditingSuppression,
   listItemIndentChange,
@@ -32,6 +33,7 @@ import {
   slashCommandCompletionSource,
   slashCommandsForLocale,
   slashCommandTemplate,
+  shouldUseNativePasteDuringComposition,
 } from "../src/client/source-editor.mjs";
 
 test("minimalDocumentChange preserves unchanged editor ranges around a remote update", () => {
@@ -317,6 +319,31 @@ test("Live typing keeps the active list item in source editing state", () => {
   );
 });
 
+test("Live IME composition keeps reading decorations stable until composition ends", () => {
+  assert.equal(
+    liveMarkdownDecorationsNeedRebuild({
+      docChanged: true,
+      selectionChanged: true,
+      activeComposition: true,
+    }),
+    false,
+  );
+  assert.equal(
+    liveMarkdownDecorationsNeedRebuild({
+      compositionChanged: true,
+      activeComposition: false,
+    }),
+    true,
+  );
+  assert.equal(
+    liveMarkdownDecorationsNeedRebuild({
+      docChanged: true,
+      activeComposition: false,
+    }),
+    true,
+  );
+});
+
 test("Live list item indentation uses two source spaces", () => {
   assert.deepEqual(listItemIndentChange("- Item", "indent"), {
     from: 0,
@@ -461,6 +488,18 @@ test("pastedTextLinkCandidate only handles URLs and Markdown document paths", ()
   assert.equal(pastedTextLinkCandidate("/Users/demo/repo/docs/report.mdx"), "/Users/demo/repo/docs/report.mdx");
   assert.equal(pastedTextLinkCandidate("ordinary text"), "");
   assert.equal(pastedTextLinkCandidate("https://example.com\nsecond line"), "");
+});
+
+test("Live paste stays native while an input method composition is active", () => {
+  assert.equal(
+    shouldUseNativePasteDuringComposition({ isComposing: true }, {}),
+    true,
+  );
+  assert.equal(
+    shouldUseNativePasteDuringComposition({}, { compositionStarted: true }),
+    true,
+  );
+  assert.equal(shouldUseNativePasteDuringComposition({}, {}), false);
 });
 
 test("Slash menu templates keep frontmatter human-entered and format MDX attributes on separate lines", () => {
