@@ -4,6 +4,18 @@ OpenGlance follows Semantic Versioning for its shared app version. Git tags iden
 official public artifacts, signatures, checksums, and platform availability are authoritative only on
 the [OpenGlance download page](https://gitleaf.mangofuture.com/download).
 
+## 3.2.1 — 2026-09-07 (internal release)
+
+### Fixed
+
+- Kept healthy repositories and the workbench reachable when a requested document or worktree is
+  missing, and reported filesystem `ENOENT` failures as missing content instead of a missing Git
+  executable.
+- Resolved ordinary `/open` document links through Git's primary-worktree metadata while preserving
+  exact explicit worktree and local-path targets plus the existing `/share` publication safeguards.
+- Kept Agent smoke Apps inside their disposable Profile without quitting or replacing the installed
+  human App, refreshing the Dock, or registering default protocol handlers.
+
 ## 3.2.0 — 2026-09-06 (internal release)
 
 ### Added
