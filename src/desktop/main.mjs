@@ -89,9 +89,7 @@ import {
   repositorySelectionErrorMessage,
 } from "./repository-errors.mjs";
 import { startDesktopOpenGlanceServer } from "./server.mjs";
-import {
-  OPENGLANCE_SUPPORTED_PROTOCOLS,
-} from "./deep-link.mjs";
+import { registerDesktopProtocols } from "./protocol-registration.mjs";
 import {
   confirmOpenGlanceHandoff,
   reportOpenGlanceShareHandoffState,
@@ -162,7 +160,7 @@ import { isToggleFavoriteShortcut } from "../../public/sidebar-favorites.js";
 import { sidebarTabFromShortcut } from "../../public/sidebar-navigation.js";
 
 applyStableUserDataPath({ app });
-applyDevelopmentUserDataOverride({ app });
+const developmentUserData = applyDevelopmentUserDataOverride({ app });
 configureMacUpdateInstallation({
   platform: process.platform,
   isPackaged: app.isPackaged,
@@ -242,7 +240,7 @@ function preferencesForRenderer(preferences = desktopRepositoryState.preferences
 }
 
 if (windowsBootstrap.status === "current") {
-  registerDesktopProtocol();
+  registerDesktopProtocols({ app, isolatedUserData: developmentUserData.applied });
   app.on("open-url", (event, url) => {
     event.preventDefault();
     const request = parseDesktopArgs([url]);
@@ -367,20 +365,6 @@ async function releaseManualWindowsBootstrapLock() {
   }
   app.releaseSingleInstanceLock();
   manualWindowsBootstrapLockReleased = true;
-}
-
-function registerDesktopProtocol() {
-  const results = OPENGLANCE_SUPPORTED_PROTOCOLS.map((protocol) => {
-    if (process.defaultApp && process.argv[1]) {
-      return app.setAsDefaultProtocolClient(
-        protocol,
-        process.execPath,
-        [path.resolve(process.argv[1])],
-      );
-    }
-    return app.setAsDefaultProtocolClient(protocol);
-  });
-  return results.every(Boolean);
 }
 
 function installWindowsStartMenuShortcut() {
@@ -2403,7 +2387,7 @@ async function initialRepositoryCandidates(options) {
     const repoRoot = await findGithubRepositoryRoot(
       options.repository,
       desktopRepositoryCandidates(),
-      { worktree: options.worktree },
+      { worktree: options.worktree, primary: true },
     );
     return repoRoot ? [repoRoot] : [];
   }
@@ -2438,7 +2422,7 @@ async function openDesktopRequest(options) {
   let repoRoot = options.repoRoot || await findGithubRepositoryRoot(
     options.repository,
     desktopRepositoryCandidates(),
-    { worktree: options.worktree },
+    { worktree: options.worktree, primary: true },
   );
   if (!repoRoot && options.repository) {
     const selection = await requestDeepLinkRepository(options);
@@ -2765,7 +2749,15 @@ async function requestDeepLinkRepository(options) {
         failureMessage = desktopText("share.worktreeMissingFromRepository");
         failureDetail = repositoryWorktreeNotFoundMessage(options.repository, options.worktree);
       } else {
-        return { status: "selected", repoRoot: identityRoot };
+        const targetRoot = options.share ? identityRoot : await findGithubRepositoryRoot(
+          options.repository,
+          [identityRoot],
+          { primary: true },
+        );
+        if (targetRoot) {
+          return { status: "selected", repoRoot: targetRoot };
+        }
+        failureMessage = desktopText("share.mainMissing");
       }
     } catch (error) {
       failureDetail = repositorySelectionErrorMessage(picked.filePaths[0], error, {

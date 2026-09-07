@@ -142,6 +142,7 @@ export async function findGithubRepositoryRoot(
   candidates = [],
   {
     worktree = "",
+    primary = false,
     originReader = readOrigin,
     readWorktrees = listGitWorktrees,
     candidateAccess = access,
@@ -167,11 +168,11 @@ export async function findGithubRepositoryRoot(
     try {
       const origin = await originReader(repoRoot);
       if (githubRepositoryIdentityFromRemote(origin) === expectedIdentity) {
-        if (!worktree) {
+        if (!worktree && !primary) {
           return repoRoot;
         }
         const selected = (await readWorktrees(repoRoot)).find(
-          (candidate) => candidate.available && candidate.id === worktree,
+          (candidate) => candidate.available && (worktree ? candidate.id === worktree : candidate.primary),
         );
         if (selected) {
           return selected.root;

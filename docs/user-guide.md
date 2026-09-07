@@ -376,9 +376,9 @@ The normal Agent-to-person flow is:
 2. The Agent returns an HTTPS **Open in OpenGlance** link instead of only a local path.
 3. The browser opens Mango Future's `/open` handoff page and, on the first use, may ask permission to
    launch OpenGlance.
-4. OpenGlance matches the GitHub repository identity to a local checkout, asks the user to choose one
-   when necessary, and opens the requested document. A linked-worktree URL also selects that exact
-   worktree on the same machine.
+4. OpenGlance matches the GitHub repository identity, asks the user to choose a local repository when
+   necessary, and opens the document in its primary checkout. A linked-worktree URL selects that exact
+   worktree on the same machine and reports an error if it is missing.
 
 After installing OpenGlance and making the public example available locally, try the complete handoff:
 

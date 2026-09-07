@@ -767,11 +767,9 @@ test("dev install updates the local Applications app and launches it", () => {
   assert.deepEqual(devSmokeSteps, [
     "validate-smoke-user-data",
     "package",
-    "quit-dev-app",
     "prepare-dev-user-data",
     "install-dev-app",
     "cleanup-dev-package",
-    "refresh-dev-app-icon",
     "launch-dev-app-and-wait",
     "verify-production-profile",
     "cleanup-smoke-user-data",
@@ -1289,6 +1287,19 @@ test("dev install marks the same app identity as a development build", () => {
     }).installedAppDir,
     "/Applications/OpenGlance.app",
   );
+});
+
+test("Agent smoke installs inside its disposable Profile and never quits or registers the human app", () => {
+  const profile = path.join(tmpdir(), "openglance-smoke-test", "profile");
+  const options = macDevelopmentInstallOptions({
+    smoke: true,
+    devUserDataDir: profile,
+    applicationsDir: "/Applications",
+  });
+  const paths = macDevelopmentInstallPaths(options);
+  assert.equal(paths.installedAppDir, path.join(profile, "Applications", "OpenGlance.app"));
+  assert.equal(devSmokeSteps.includes("quit-dev-app"), false);
+  assert.equal(devSmokeSteps.includes("refresh-dev-app-icon"), false);
 });
 
 test("default release options use the Mango Future Developer ID profile", () => {

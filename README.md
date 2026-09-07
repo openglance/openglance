@@ -58,7 +58,8 @@ than Obsidian.
   when a user chooses to publish, one action commits and pushes all local changes in the current
   repository.
 - **Links that share like online documents.** Teammates and agents can send OpenGlance HTTPS links in chat,
-  letting recipients open the matching document in their local knowledge base. OpenGlance creates a
+  letting recipients open the matching document in their local knowledge base. Ordinary document links
+  open the primary checkout; worktree-specific links select that exact local worktree. OpenGlance creates a
   versioned share link only after verifying the published revision.
 - **Agent-readable data, human-readable visuals.** Standard Mermaid fences and controlled MDX keep
   diagrams, charts, tables, and metrics as readable repository text that agents can edit and OpenGlance

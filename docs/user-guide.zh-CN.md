@@ -309,8 +309,8 @@ Agent 把文档交给人检查时，完整流程是：
 2. Agent 在最终回复中给出 HTTPS **Open in OpenGlance** 链接，而不是只给一个本机路径。
 3. 浏览器打开 Mango Future 托管的 `/open` 中转页；第一次使用时，浏览器可能询问是否允许启动
    OpenGlance。
-4. OpenGlance 根据 GitHub 仓库标识匹配本机 checkout，必要时请用户选择本机目录，然后打开指定文档。
-   如果链接来自 linked worktree，还会在同一台机器上选择那个准确的 worktree。
+4. OpenGlance 根据 GitHub 仓库标识匹配本机仓库，必要时请用户选择本机目录，然后在主工作目录打开指定文档。
+   如果链接来自 linked worktree，则在同一台机器上选择那个准确的 worktree；目录缺失时会明确报错。
 
 安装 OpenGlance，并让公开示例仓库在本机可用后，可以直接体验完整中转：
 

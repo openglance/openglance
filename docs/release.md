@@ -129,7 +129,9 @@ marker does not make it official, enable telemetry, or select a `git-leaf-dev` d
 Agent-driven automated UI verification, when run as a separate development task, is the only macOS flow
 that selects another Profile. It creates a one-time snapshot of the real Profile, passes its temporary
 path explicitly as both `userData` and `sessionData`, verifies the real Profile after the App exits, and
-then deletes only the snapshot. This automated UI verification remains outside the formal release gates.
+then deletes only the snapshot. Its App bundle lives inside the snapshot's `Applications` directory;
+smoke does not replace or quit the installed human App, refresh its Dock icon, or register default
+protocol handlers. This automated UI verification remains outside the formal release gates.
 It is a routine reversible verification step and does not require a separate maintainer confirmation
 merely because the isolated development App is visible. When a harness requires an
 `--allow-visible-app` intent flag, the automation supplies it as part of the already-authorized flow.
