@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, realpath, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -15,6 +15,38 @@ import {
 import { worktreeIdForPath } from "../src/server/git-worktrees.mjs";
 
 const execFileAsync = promisify(execFile);
+
+test("a missing initial document leaves the repository and its other documents available", async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), "openglance-missing-document-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const repoRoot = await createGitRepo(root, "docs", { "README.md": "# Still available\n" });
+  for (const initialFilePath of ["missing.md", "removed/guide.md", "README.md/guide.md"]) {
+    const desktop = await startDesktopOpenGlanceServer({ repoRoot, initialFilePath, port: 0 });
+    try {
+      assert.equal(new URL(desktop.url).searchParams.get("file"), initialFilePath);
+      assert.equal((await fetch(desktop.url)).status, 200);
+      const missing = await fetch(new URL(`/api/document?file=${encodeURIComponent(initialFilePath)}`, desktop.url));
+      assert.equal(missing.ok, false);
+      const existing = await fetch(new URL("/api/document?file=README.md", desktop.url));
+      assert.equal(existing.status, 200);
+      assert.match((await existing.json()).html, /Still available/);
+    } finally {
+      await desktop.close();
+    }
+  }
+});
+
+test("missing initial documents do not bypass repository or path boundaries", async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), "openglance-document-boundary-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const repoRoot = await createGitRepo(root, "docs", { "README.md": "# Docs\n" });
+  await assert.rejects(startDesktopOpenGlanceServer({ repoRoot, initialFilePath: "../missing.md", port: 0 }), /inside the repository/);
+  const outside = path.join(root, "outside");
+  await mkdir(outside);
+  await symlink(outside, path.join(repoRoot, "escape"), process.platform === "win32" ? "junction" : "dir");
+  await assert.rejects(startDesktopOpenGlanceServer({ repoRoot, initialFilePath: "escape/missing.md", port: 0 }), { statusCode: 400 });
+  await assert.rejects(startDesktopOpenGlanceServer({ repoRoot: outside, initialFilePath: "missing.md", port: 0 }), /repository/i);
+});
 
 test("desktop preview URLs stay on localhost", () => {
   assert.equal(DESKTOP_BIND_HOST, "127.0.0.1");

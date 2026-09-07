@@ -1705,6 +1705,7 @@ async function loadDesktopHomePage({ errorState = null } = {}) {
   const checks = await desktopEnvironmentChecks({ language: resolvedLanguage });
   const html = desktopHomeHtml({
     checks,
+    repositories: desktopRepositoryPanelItems(desktopRepositoryState.openRepoRoots),
     errorMessage: localizeDesktopHomeError(
       errorState,
       desktopRepositoryState.preferences ?? {},
@@ -1993,7 +1994,7 @@ async function switchRepositoryFromPanel(repositoryId) {
     repositoryId,
   );
   isRepositoryPanelOpen = false;
-  if (!targetRoot || targetRoot === activeServer?.repositoryRoot) {
+  if (!targetRoot) {
     return false;
   }
   return openKnownRepository(targetRoot);

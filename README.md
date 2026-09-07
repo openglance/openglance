@@ -179,7 +179,8 @@ JSX, JavaScript, imports, or scripts.
   available, while keeping the full repository-relative path in the hover tooltip.
 - A searchable, drag-reorderable repository panel for opening, switching, and removing repositories from
   OpenGlance without deleting local files, plus worktree switching with restored tabs, navigation history,
-  scroll positions, and focus.
+  scroll positions, and focus. Missing documents leave the workbench usable; if a repository is
+  unavailable, Home keeps the saved repository list available for recovery.
 - Read-only previews for images, PDFs, CSV, JSON, JSON Lines (`.ndjson` / `.jsonl`), YAML, HTML, code,
   and other repository attachments. A CSV cell containing only a repository-local Markdown link opens
   that document directly.

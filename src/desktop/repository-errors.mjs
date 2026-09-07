@@ -38,6 +38,8 @@ const REPOSITORY_ERROR_MESSAGES = Object.freeze({
     "failure.default.summary": "OpenGlance encountered a problem while reading this repository.",
     "failure.default.action":
       "Make sure the folder still exists and the current user can access it, then try again.",
+    "failure.missingPath.summary": "The requested file or folder no longer exists.",
+    "failure.missingPath.action": "Open another document or choose an available repository.",
     "technicalInfo": "Technical information: {detail}",
   }),
   "zh-CN": Object.freeze({
@@ -64,6 +66,8 @@ const REPOSITORY_ERROR_MESSAGES = Object.freeze({
     "failure.invalidOutput.action": "OpenGlance 已停止当前操作；仓库内容没有被修改。",
     "failure.default.summary": "OpenGlance 读取这个仓库时遇到问题。",
     "failure.default.action": "请确认目录仍然存在，并且当前用户可以访问，然后重试。",
+    "failure.missingPath.summary": "请求的文件或目录已不存在。",
+    "failure.missingPath.action": "请打开其他文档，或选择一个可用的仓库。",
     "technicalInfo": "技术信息：{detail}",
   }),
 });
@@ -118,10 +122,19 @@ function repositoryErrorTranslator(options) {
 }
 
 function commandStateForRepositoryError(error) {
+  if (error?.code === "ENOENT" && error.syscall && !/^spawn\b/.test(error.syscall) && !error.externalCommandState) {
+    return "missing_path";
+  }
   return isGitRepositoryNotFoundError(error) ? "invalid_context" : externalCommandState(error);
 }
 
 function repositoryFailureGuidance(state, translate) {
+  if (state === "missing_path") {
+    return {
+      summary: translate("failure.missingPath.summary"),
+      action: translate("failure.missingPath.action"),
+    };
+  }
   if (state === "unavailable") {
     return {
       summary: translate("failure.unavailable.summary"),

@@ -126,6 +126,12 @@ the CLI working directory. When no saved session or explicit document exists, th
 priority is `AGENTS.md`, `README.md`, then `CONTEXT.md`; if none exists, OpenGlance opens an empty
 workbench.
 
+Desktop startup validates the repository independently of the requested document. A missing or
+unreadable initial file is reported through the document API inside the workbench, preserving access
+to the tree and repository switcher. When repository startup itself fails, Home renders the saved
+repository display records and reuses opaque-ID switching, including reopening a retained server's
+repository. File errors must not be classified as a missing Git executable.
+
 Repository identity and worktree state follow these rules:
 
 - the repository is the stable top-level identity;

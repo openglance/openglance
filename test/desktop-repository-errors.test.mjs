@@ -1,11 +1,24 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { lstat } from "node:fs/promises";
+import path from "node:path";
+import { tmpdir } from "node:os";
+import { randomUUID } from "node:crypto";
 
 import {
   repositorySelectionErrorMessage,
   startupRepositoryErrorMessage,
 } from "../src/desktop/repository-errors.mjs";
 import { GitRepositoryNotFoundError } from "../src/server/git-errors.mjs";
+
+test("a filesystem ENOENT explains the missing path instead of reporting Git unavailable", async () => {
+  const file = path.join(tmpdir(), `openglance-missing-${randomUUID()}.md`);
+  const error = await lstat(file).catch((failure) => failure);
+  for (const format of [repositorySelectionErrorMessage, startupRepositoryErrorMessage]) {
+    assert.match(format("/repo", error), /requested file or folder no longer exists/);
+    assert.match(format("/repo", error, { language: "zh-CN" }), /文件或目录已不存在/);
+  }
+});
 
 test("repository selection defaults to English for non-Git directories", () => {
   const message = repositorySelectionErrorMessage(

@@ -1,11 +1,24 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { desktopRepositoryPanelItems, desktopRepositoryRootForPanelId } from "../src/desktop/repository-panel.mjs";
 
 import {
   desktopHomeHtml,
   desktopPageBackgroundColor,
   desktopProgressHtml,
 } from "../src/desktop/home.mjs";
+
+test("the error home keeps saved repositories reachable through their opaque IDs", () => {
+  const roots = ["/private/work/first", "/private/work/second"];
+  const html = desktopHomeHtml({
+    checks: [{ id: "git-command", status: "ok" }],
+    errorMessage: "The requested worktree is unavailable.",
+    repositories: desktopRepositoryPanelItems(roots),
+  });
+  const links = [...html.matchAll(/href="(openglance:\/\/switch-repository[^\"]+)"/g)];
+  assert.deepEqual(links.map(([, href]) => desktopRepositoryRootForPanelId(roots, new URL(href).searchParams.get("id"))), roots);
+  assert.doesNotMatch(html, /\/private\/work\//);
+});
 
 test("desktop home page explains repository selection and renders environment checks", () => {
   const html = desktopHomeHtml({
@@ -148,6 +161,7 @@ test("desktop home page allows opening repositories when only optional checks wa
 
 test("desktop home page blocks repository opening when Git is missing", () => {
   const html = desktopHomeHtml({
+    repositories: desktopRepositoryPanelItems(["/work/docs"]),
     preferences: { language: "zh-CN" },
     checks: [
       {
@@ -169,7 +183,7 @@ test("desktop home page blocks repository opening when Git is missing", () => {
   assert.match(html, /请先处理 Git 命令/);
   assert.match(html, /data-next-action="blocked"/);
   assert.match(html, /aria-disabled="true"/);
-  assert.doesNotMatch(html, /openglance:\/\/open-repository/);
+  assert.doesNotMatch(html, /openglance:\/\/(?:open-repository|switch-repository)/);
 });
 
 test("desktop progress page gives immediate feedback during repository transitions", () => {
@@ -183,7 +197,7 @@ test("desktop progress page gives immediate feedback during repository transitio
   assert.match(html, /正在打开仓库/);
   assert.match(html, /正在启动本地服务 &lt;script&gt;alert\(1\)&lt;\/script&gt;/);
   assert.match(html, /progress-indicator/);
-  assert.doesNotMatch(html, /openglance:\/\/open-repository/);
+  assert.doesNotMatch(html, /openglance:\/\/(?:open-repository|switch-repository)/);
   assert.doesNotMatch(html, /<script>alert\(1\)<\/script>/);
 });
 

@@ -1,5 +1,6 @@
 import { appDisplayName, BUILD_INFO } from "../build-info.mjs";
 import { normalizeColorMode } from "../../public/settings-preferences.js";
+import { repositoryPanelActionUrl } from "../../public/repository-panel.js";
 import {
   createDesktopTranslator,
   resolveDesktopLanguage,
@@ -20,6 +21,7 @@ export function desktopPageBackgroundColor(
 export function desktopHomeHtml({
   checks = [],
   errorMessage = "",
+  repositories = [],
   buildInfo = BUILD_INFO,
   preferences = {},
   systemLanguages = [],
@@ -271,6 +273,31 @@ export function desktopHomeHtml({
       overflow-wrap: anywhere;
     }
 
+    .saved-repositories {
+      display: grid;
+      gap: 8px;
+    }
+
+    .saved-repository {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 14px 16px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--text);
+      text-decoration: none;
+      overflow-wrap: anywhere;
+    }
+
+    a.saved-repository:hover, a.saved-repository:focus-visible {
+      border-color: var(--primary);
+    }
+
+    .saved-repository-context { color: var(--muted); font-size: 13px; }
+
     @media (max-width: 640px) {
       main {
         width: min(100vw - 32px, 860px);
@@ -298,6 +325,7 @@ export function desktopHomeHtml({
       ${repositoryActionHtml(readiness, translate)}
     </div>
     ${errorMessage ? `<div class="error-message">${escapeHtml(errorMessage)}</div>` : ""}
+    ${savedRepositoriesHtml(repositories, readiness, translate)}
     <section aria-labelledby="environment-heading">
       <h2 id="environment-heading">${escapeHtml(translate("home.environment"))}</h2>
       <div class="check-list">
@@ -309,6 +337,19 @@ export function desktopHomeHtml({
   ${desktopPreferenceBridgeScript()}
 </body>
 </html>`;
+}
+
+function savedRepositoriesHtml(repositories, readiness, translate) {
+  if (!repositories.length) return "";
+  return `<section aria-labelledby="repositories-heading">
+    <h2 id="repositories-heading">${escapeHtml(translate("home.repositories"))}</h2>
+    <div class="saved-repositories">${repositories.map((repository) => {
+      const label = `<span>${escapeHtml(repository.name)}</span>${repository.context ? `<span class="saved-repository-context">${escapeHtml(repository.context)}</span>` : ""}`;
+      return readiness.canOpenRepository
+        ? `<a class="saved-repository" href="${escapeHtml(repositoryPanelActionUrl("switch", repository.id))}">${label}</a>`
+        : `<span class="saved-repository" aria-disabled="true">${label}</span>`;
+    }).join("")}</div>
+  </section>`;
 }
 
 function desktopReadiness(checks, translate) {

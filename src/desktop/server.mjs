@@ -1,7 +1,7 @@
 import path from "node:path";
 
 import { LOCALHOST_HOST, previewServerUrl } from "../server/network-address.mjs";
-import { resolveOpenablePath } from "../server/paths.mjs";
+import { resolveOpenablePath, toPosixPath } from "../server/paths.mjs";
 import { createRepositoryInfo } from "../server/repositories.mjs";
 import { createPreviewServer } from "../server/index.mjs";
 import { workbenchSessionForRepo } from "../../public/workbench-session.js";
@@ -35,14 +35,14 @@ export async function startDesktopOpenGlanceServer({
     throw new Error("repoRoot is required to start OpenGlance desktop.");
   }
 
+  const repository = await createRepositoryInfo({ repoRoot });
   const initialFile = await resolveDesktopInitialFile({
-    repoRoot,
+    repoRoot: repository.root,
     initialFilePath,
   });
-  const repository = await createRepositoryInfo({
-    repoRoot,
-    initialFile,
-  });
+  if (initialFile) {
+    repository.defaultFile = initialFile.relativePath;
+  }
   const initialSession = workbenchSessionForRepo(
     desktopPreferences?.workbenchSessions,
     repository.worktreeId,
@@ -108,9 +108,20 @@ async function resolveDesktopInitialFile({ repoRoot, initialFilePath }) {
       ? initialFilePath
       : path.resolve(repoRoot, initialFilePath)
     : "";
-  return absoluteInitialFile
-    ? await resolveOpenablePath(repoRoot, absoluteInitialFile)
-    : null;
+  if (!absoluteInitialFile) return null;
+  try {
+    return await resolveOpenablePath(repoRoot, absoluteInitialFile);
+  } catch (error) {
+    if (!["ENOENT", "ENOTDIR", "EACCES", "EPERM"].includes(error?.code)) throw error;
+    const relativePath = path.relative(repoRoot, absoluteInitialFile);
+    if (!relativePath || relativePath === ".." || relativePath.startsWith(`..${path.sep}`) || path.isAbsolute(relativePath)) {
+      throw error;
+    }
+    // The repository is already validated. Let the document API report a file
+    // failure inside the workbench, where the tree and repository switch remain
+    // usable. Every subsequent read still goes through the normal path boundary.
+    return { relativePath: toPosixPath(relativePath) };
+  }
 }
 
 function desktopRepositoryUrl({ port, repo, relativePath }) {

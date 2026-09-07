@@ -462,6 +462,11 @@ The row action can remove a repository from OpenGlance. This removes it only fro
 list: OpenGlance does not delete the local directory, Git files, branches, or unpublished changes. Opening
 the same repository again restores its saved workspace state and Favorites.
 
+If a requested document is missing or unreadable, its error appears in the workbench. Choose another
+file from the tree or switch repositories as usual. If the repository or worktree itself is unavailable,
+Home shows the error alongside **Opened repositories**, where you can choose another saved repository
+without locating its folder again.
+
 When a repository has multiple Git worktrees, the worktree selector replaces the repeated repository
 name in the sidebar header while the repository-panel button remains separate. Each worktree keeps
 separate tabs, folder state, reading position, and local changes. Favorites are shared across the
