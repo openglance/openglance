@@ -4,6 +4,18 @@ OpenGlance follows Semantic Versioning for its shared app version. Git tags iden
 official public artifacts, signatures, checksums, and platform availability are authoritative only on
 the [OpenGlance download page](https://gitleaf.mangofuture.com/download).
 
+## 3.2.2 — 2026-09-11 (internal release)
+
+### Fixed
+
+- Refreshed document edit cues when Git's committed baseline changes, clearing stale highlights after
+  an external commit without replacing the editor or discarding pending input.
+- Migrated legacy macOS `Git Leaf.app` installations to `OpenGlance.app` on startup while preserving
+  the internal executable, application identity, existing Profile, and subsequent update path.
+- Kept legacy installations usable when the new name is occupied or the parent directory is not
+  writable, restored the original path after a failed relaunch, and preserved older development
+  updaters' startup confirmation.
+
 ## 3.2.1 — 2026-09-07 (internal release)
 
 ### Fixed

@@ -26,7 +26,12 @@ function fixture(t) {
   return { home, source, target, executable, options, plan: macAppNameMigrationPlan(options) };
 }
 
-test("a legacy internal App moves once without changing its inode, executable, Profile, or launch request", async t => {
+test("a legacy internal App moves once without changing its inode, executable, Profile, or launch request", {
+  // Windows cannot atomically rename a directory over the empty reserved destination.
+  // Production migration only runs on macOS; the transaction tests below inject the move
+  // so launch, recovery, and updater contracts are still exercised on every platform.
+  skip: process.platform === "win32" ? "Requires POSIX directory replacement" : false,
+}, async t => {
   const f = fixture(t);
   const profile = path.join(f.home, "Profile");
   mkdirSync(profile);
@@ -104,6 +109,7 @@ test("a failed canonical launch restores the same App and retries startup once a
   const launches = [];
   const result = await completeMacAppNameMigration({
     plan: f.plan, launchArgs: ["--repo=example"],
+    moveApp: (source, target) => renameSync(source, target),
     launchApp: async request => {
       launches.push(request);
       if (request.appPath === f.target) throw new Error("Launch failed");
@@ -117,7 +123,11 @@ test("a failed canonical launch restores the same App and retries startup once a
 
 test("subsequent ShipIt updates target the migrated App and preserve its canonical outer name", async t => {
   const f = fixture(t);
-  await completeMacAppNameMigration({ plan: f.plan, launchApp: async () => {} });
+  await completeMacAppNameMigration({
+    plan: f.plan,
+    moveApp: (source, target) => renameSync(source, target),
+    launchApp: async () => {},
+  });
   const cache = macUpdateCachePaths({ homeDir: f.home });
   const updateApp = path.join(cache.updateRoot, "update.NEXT", "OpenGlance.app");
   mkdirSync(updateApp, { recursive: true });
