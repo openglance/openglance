@@ -46,7 +46,11 @@ import { parseNdjsonRecords } from "./ndjson.js";
 import { csvMarkdownDocumentLink, parseCsvRows } from "./csv-preview.js";
 import { githubFileUrl } from "./file-actions.js";
 import { hasTreeChanged } from "./tree-refresh.js";
-import { shouldReplaceDocumentHtml } from "./document-refresh.js";
+import {
+  documentStatusRefreshKind,
+  shouldReplaceDocumentHtml,
+  withDocumentChangeBaseline,
+} from "./document-refresh.js";
 import {
   changedOutlineTargets,
   createDocumentChangeModel,
@@ -58,7 +62,6 @@ import { attachDatasetViews } from "./dataset-view.js";
 import { attachMermaidDiagrams } from "./mermaid-view.js";
 import {
   sourceLineFromPreviewScroll,
-  shouldIgnoreWatchedChange,
   sourceLineForPreviewSync,
   syncLabelForState,
 } from "./source-sync.js";
@@ -9120,22 +9123,13 @@ async function handleWatchedDocumentChange(event, request = currentDocumentReque
   if (state.sourceWriteInFlight || state.remoteSyncOperation === "merge") {
     return;
   }
-  const dependencyChanged = payload.dependencyHash !== state.currentDocument.dependencyHash;
-  if (payload.sourceHash === state.currentDocument.sourceHash && !dependencyChanged) {
-    return;
+  const refreshKind = documentStatusRefreshKind(state.currentDocument, payload, {
+    currentMode: state.mode,
+    lastWrittenHash: state.lastWrittenHash,
+  });
+  if (refreshKind) {
+    await refreshCurrentDocument({ external: true, baselineOnly: refreshKind === "baseline" });
   }
-  if (
-    !dependencyChanged &&
-    shouldIgnoreWatchedChange({
-      currentMode: state.mode,
-      watchedHash: payload.sourceHash,
-      lastWrittenHash: state.lastWrittenHash,
-    })
-  ) {
-    return;
-  }
-
-  await refreshCurrentDocument({ external: true });
 }
 
 async function checkDocumentStatus() {
@@ -9165,23 +9159,16 @@ async function checkDocumentStatus() {
   if (state.sourceWriteInFlight || state.remoteSyncOperation === "merge") {
     return;
   }
-  const dependencyChanged = status.dependencyHash !== state.currentDocument.dependencyHash;
-  if (
-    !dependencyChanged &&
-    shouldIgnoreWatchedChange({
-      currentMode: state.mode,
-      watchedHash: status.sourceHash,
-      lastWrittenHash: state.lastWrittenHash,
-    })
-  ) {
-    return;
-  }
-  if (dependencyChanged || status.mtimeMs > state.currentDocument.mtimeMs) {
-    await refreshCurrentDocument({ external: true });
+  const refreshKind = documentStatusRefreshKind(state.currentDocument, status, {
+    currentMode: state.mode,
+    lastWrittenHash: state.lastWrittenHash,
+  });
+  if (refreshKind) {
+    await refreshCurrentDocument({ external: true, baselineOnly: refreshKind === "baseline" });
   }
 }
 
-async function refreshCurrentDocument({ external = false, remoteMerge = false } = {}) {
+async function refreshCurrentDocument({ external = false, remoteMerge = false, baselineOnly = false } = {}) {
   const request = currentDocumentRequest();
   if (!request) {
     return;
@@ -9200,6 +9187,14 @@ async function refreshCurrentDocument({ external = false, remoteMerge = false } 
 
   const documentData = await response.json();
   if (!isCurrentDocumentRequest(request, documentData)) {
+    return;
+  }
+  if (baselineOnly) {
+    // A commit changes the comparison baseline, not the editor's current text or pending writes.
+    state.currentDocument = withDocumentChangeBaseline(state.currentDocument, documentData);
+    state.documentChangeModel = documentChangeModelForDocument(state.currentDocument);
+    applySourceEditorDocumentChangeBaseline();
+    refreshDocumentChangePresentation();
     return;
   }
   applyDocumentData(documentData, {

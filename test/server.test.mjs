@@ -616,6 +616,59 @@ test("document API exposes edit cues only when the document has a committed base
   }
 });
 
+test("document status follows the current file's committed baseline without requiring a file modification", async () => {
+  const repoRoot = await mkdtemp(path.join(tmpdir(), "openglance-baseline-status-"));
+  const git = (args) => execFileAsync("git", args, { cwd: repoRoot });
+  const filePath = path.join(repoRoot, "sample.md");
+  await git(["init", "-q"]);
+  await git(["config", "user.email", "smoke@example.invalid"]);
+  await git(["config", "user.name", "OpenGlance Test"]);
+  await writeFile(filePath, "# Before\n");
+  await git(["add", "sample.md"]);
+  await git(["commit", "-qm", "Initial"]);
+  const initialHead = (await git(["rev-parse", "HEAD"])).stdout.trim();
+  await writeFile(filePath, "# After\n");
+  const initialFile = await resolvePreviewPath(repoRoot, "sample.md");
+  const server = createPreviewServer({ repoRoot, initialFile });
+  const baseUrl = await listen(server);
+  const status = (file = "sample.md") => getJson(`${baseUrl}/api/document-status?file=${file}`);
+  const document = (file = "sample.md") => getJson(`${baseUrl}/api/document?file=${file}`);
+  try {
+    const before = await status();
+    assert.equal(before.changeBaselineRevision, (await document()).changeBaselineRevision);
+    assert.equal(Object.hasOwn(before, "changeBaselineSource"), false);
+    await git(["add", "sample.md"]);
+    await git(["commit", "-qm", "Commit the open document"]);
+    assert.equal((await git(["status", "--porcelain"])).stdout, "");
+    const committed = await status();
+    assert.equal(committed.mtimeMs, before.mtimeMs);
+    assert.equal(committed.sourceHash, before.sourceHash);
+    assert.notEqual(committed.changeBaselineRevision, before.changeBaselineRevision);
+    assert.equal(committed.changeBaselineRevision, (await git(["rev-parse", "HEAD:sample.md"])).stdout.trim());
+    const clean = await document();
+    assert.equal(clean.changeBaselineRevision, committed.changeBaselineRevision);
+    assert.equal(clean.changeBaselineSource, clean.source);
+
+    await writeFile(path.join(repoRoot, "other.md"), "# Other\n");
+    assert.equal((await status("other.md")).changeBaselineRevision, null);
+    await git(["add", "other.md"]);
+    await git(["commit", "-qm", "Unrelated document"]);
+    assert.equal((await status()).changeBaselineRevision, committed.changeBaselineRevision);
+    assert.equal((await status("other.md")).changeBaselineRevision, (await document("other.md")).changeBaselineRevision);
+    assert.equal((await document("other.md")).changeBaselineAvailable, true);
+
+    await git(["reset", "--soft", initialHead]);
+    const reset = await status();
+    assert.equal(reset.mtimeMs, before.mtimeMs);
+    assert.equal(reset.sourceHash, before.sourceHash);
+    assert.equal(reset.changeBaselineRevision, before.changeBaselineRevision);
+    assert.equal((await status("other.md")).changeBaselineRevision, null);
+  } finally {
+    await close(server);
+    await rm(repoRoot, { recursive: true, force: true });
+  }
+});
+
 test("tree API always returns every repository file", async () => {
   const repoRoot = await mkdtemp(path.join(tmpdir(), "git-leaf-"));
   await mkdir(path.join(repoRoot, "docs"), { recursive: true });

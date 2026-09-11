@@ -924,6 +924,7 @@ async function handleRequest(request, response, context) {
       response,
       200,
       await documentStatusPayload(repo, file, {
+        gitRunner: context.gitRunner,
         canEdit: canEditRepository({
           repo,
           isLocalRequest: canEditRequest(request, context),
@@ -1236,32 +1237,39 @@ export async function documentPayload(
   return payload;
 }
 
-async function documentChangeBaselinePayload(repo, relativePath, gitRunner) {
+async function documentChangeBaselineRevision(repo, relativePath, gitRunner) {
   if (typeof gitRunner !== "function") {
-    return { changeBaselineAvailable: false };
+    return null;
   }
-
   try {
-    const result = await gitRunner(repo.root, ["rev-parse", "--is-inside-work-tree"]);
-    if (String(result.stdout ?? "").trim() !== "true") {
-      return { changeBaselineAvailable: false };
-    }
+    const result = await gitRunner(repo.root, ["rev-parse", "--verify", `HEAD:${relativePath}`]);
+    const revision = String(result.stdout ?? "").trim();
+    return /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(revision) ? revision : null;
   } catch {
-    return { changeBaselineAvailable: false };
-  }
-
-  try {
-    const result = await gitRunner(repo.root, ["show", `HEAD:${relativePath}`]);
-    return {
-      changeBaselineAvailable: true,
-      changeBaselineSource: String(result.stdout ?? ""),
-    };
-  } catch {
-    return { changeBaselineAvailable: false };
+    return null;
   }
 }
 
-async function documentStatusPayload(repo, file, { canEdit = true } = {}) {
+async function documentChangeBaselinePayload(repo, relativePath, gitRunner) {
+  const revision = await documentChangeBaselineRevision(repo, relativePath, gitRunner);
+  const unavailable = { changeBaselineAvailable: false, changeBaselineRevision: null };
+  if (!revision) {
+    return unavailable;
+  }
+  try {
+    // Read the inspected blob so a concurrent commit cannot mismatch its revision and source.
+    const result = await gitRunner(repo.root, ["show", revision]);
+    return {
+      changeBaselineAvailable: true,
+      changeBaselineRevision: revision,
+      changeBaselineSource: String(result.stdout ?? ""),
+    };
+  } catch {
+    return unavailable;
+  }
+}
+
+async function documentStatusPayload(repo, file, { canEdit = true, gitRunner = null } = {}) {
   const documentPath = await resolveOpenablePath(repo.root, file);
   const fileStat = documentPath.fileStat;
   const source = documentPath.kind === "markdown"
@@ -1285,6 +1293,9 @@ async function documentStatusPayload(repo, file, { canEdit = true } = {}) {
     mtimeMs: fileStat.mtimeMs,
     sourceHash,
     dependencyHash,
+    ...(canEdit && documentPath.kind === "markdown" ? {
+      changeBaselineRevision: await documentChangeBaselineRevision(repo, documentPath.relativePath, gitRunner),
+    } : {}),
   };
 }
 
@@ -1803,6 +1814,7 @@ async function streamDocumentWatch(request, response, repo, file, context) {
     try {
       const currentRepo = await withRuntimeBranch(repo);
       const payload = await documentStatusPayload(currentRepo, documentPath.relativePath, {
+        gitRunner: context.gitRunner,
         canEdit: canEditRepository({
           repo: currentRepo,
           isLocalRequest: canEditRequest(request, context),

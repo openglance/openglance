@@ -475,6 +475,12 @@ The component allowlist, attributes, input data formats, and rendering contracts
 
 ## Editing and write boundaries
 
+Document status tracks the current file's committed Git blob independently of its working-file content
+and dataset dependencies. A commit or soft reset can therefore refresh edit cues without a file write;
+commits affecting only other files do not invalidate this baseline. A baseline-only refresh updates
+Preview, Source, Live, and outline cues while retaining the current document surface, editor selection,
+and pending local input.
+
 Source and Live write the current file after a short debounce. Watcher events caused by OpenGlance's own
 write are ignored by content state to avoid reload loops. External changes reload from disk. A narrow
 race may lose not-yet-flushed keystrokes rather than creating an independent hidden draft model.
