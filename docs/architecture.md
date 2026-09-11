@@ -74,12 +74,22 @@ identifiers remain compatibility contracts:
   coordinated domain migration.
 
 On macOS, a new installation uses `OpenGlance.app`. A human development install writes the canonical App
-first and then removes an existing `Git Leaf.app`. For an official internal update from `Git Leaf.app`,
-OpenGlance atomically enables Squirrel's bundle rename only when the containing directory is writable;
-ShipIt then moves the existing bundle to `OpenGlance.app` before installing the signed candidate. If the
-parent is not writable, OpenGlance sets `useUpdateBundleName=false` so the signed `Contents` update still
-succeeds in place. The visible product becomes OpenGlance in either case; the hidden internal executable
-remains `Git Leaf`, no duplicate App is created, and a later update may retry the outer-path rename.
+first and then removes an existing `Git Leaf.app`. An updated App still installed as `Git Leaf.app`
+migrates its outer name on startup, before loading repositories or persistent configuration. A detached
+helper must confirm readiness before the current instance exits; it then moves the same bundle to a
+reserved, previously absent `OpenGlance.app` sibling and launches it with the original arguments and
+Profile. A failed launch restores the legacy path and suppresses migration for that recovery launch.
+An older development-handoff helper's direct child also defers migration until a normal launch, so
+exiting for the rename cannot invalidate that helper's startup confirmation.
+A non-writable parent or an existing destination (including a symlink) defers migration while the App
+continues to work; another normal launch can retry. Bundle ID, hidden executable, signed Contents,
+App directory inode, and Profile remain unchanged.
+
+Squirrel's `useUpdateBundleName` derives a name from `CFBundleExecutable`, not the staged `.app` basename.
+OpenGlance always disables that option before installation so every update replaces signed `Contents`
+at the current path. This also prevents subsequent internal updates from reverting the canonical outer
+name to the compatibility executable's `Git Leaf` name. Name migration is independent of the updater,
+so a legacy client can install the first fixed version before the new startup code performs migration.
 
 On Windows, internal packages contain one bounded `Git Leaf.exe` copy so the baked-in 1.x updater can
 launch the new code. The new process migrates the old fixed installation into
@@ -734,7 +744,11 @@ preserving the one referenced by `ShipItState.plist`. The steady state therefore
 complete downloaded-but-uninstalled package. Failed preparation remains retryable and must not
 masquerade as an active download.
 
-Immediately before a normal macOS installation, OpenGlance revalidates that `ShipItState.plist` is a regular file under the official per-user ShipIt cache, that its update bundle remains inside the staged `update.*` directory, and that its target is the currently running App. It atomically enables ShipIt's bundle-name migration only for a `Git Leaf.app` target whose parent is writable; every other update disables the rename and replaces signed `Contents` in place. A mismatch fails closed before `quitAndInstall`.
+Immediately before a normal macOS installation, OpenGlance revalidates that `ShipItState.plist` is a
+regular file under the official per-user ShipIt cache, that its update bundle remains inside the staged
+`update.*` directory, and that its target is the currently running App. It atomically disables ShipIt's
+executable-based bundle rename and replaces signed `Contents` in place. Startup owns the independent
+outer-name migration described above. A mismatch fails closed before `quitAndInstall`.
 
 Windows coordinates preparation and cleanup per update-cache root. A valid cached package is reusable
 only after its sibling entries are removed, and startup cleanup removes current, older, invalid, and

@@ -632,7 +632,7 @@ function validatedPreparedTreePath(value) {
   return target;
 }
 
-async function launchAndConfirmMacApp({
+export async function launchAndConfirmMacApp({
   appPath,
   args = [],
   spawnProcess = spawn,
@@ -663,7 +663,7 @@ async function launchAndConfirmMacApp({
   });
   await wait(confirmationDelayMs);
   if (child.exitCode != null || child.signalCode != null) {
-    throw new Error("The internal OpenGlance App exited before startup confirmation.");
+    throw new Error("The OpenGlance App exited before startup confirmation.");
   }
   child.unref?.();
   return true;

@@ -1,5 +1,4 @@
 import {
-  access,
   lstat,
   readFile,
   readdir,
@@ -7,7 +6,6 @@ import {
   rm,
   writeFile,
 } from "node:fs/promises";
-import { constants } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -54,7 +52,6 @@ export async function prepareMacUpdateAppPath({
   removeFn = rm,
   now = Date.now,
   processId = process.pid,
-  accessFn = access,
 } = {}) {
   const paths = macUpdateCachePaths({ homeDir, jobLabel });
   const expectedTarget = requiredDirectory(targetAppPath, "targetAppPath");
@@ -83,12 +80,10 @@ export async function prepareMacUpdateAppPath({
     throw new Error("The staged macOS update targets another App path.");
   }
 
-  const stagedAppPath = filePathFromUrl(request?.updateBundleURL);
-  const useUpdateBundleName = await shouldRenameLegacyMacApp({
-    stagedAppPath,
-    targetAppPath: expectedTarget,
-    accessFn,
-  });
+  // Squirrel derives the proposed name from CFBundleExecutable (Git Leaf in internal
+  // builds), not the staged OpenGlance.app basename. Startup migrates the outer name;
+  // ShipIt must preserve it on every subsequent Contents update.
+  const useUpdateBundleName = false;
 
   const nextRequest = {
     ...request,
@@ -119,21 +114,6 @@ export async function prepareMacUpdateAppPath({
     stagedDirectory,
     useUpdateBundleName,
   };
-}
-
-async function shouldRenameLegacyMacApp({ stagedAppPath, targetAppPath, accessFn }) {
-  if (
-    path.basename(targetAppPath) !== "Git Leaf.app"
-    || path.basename(stagedAppPath) !== "OpenGlance.app"
-  ) {
-    return false;
-  }
-  try {
-    await accessFn(path.dirname(targetAppPath), constants.W_OK);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 export async function pruneObsoleteMacUpdatePackages({

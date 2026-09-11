@@ -456,12 +456,14 @@ therefore replaces its signed `Contents` directory without write access to the r
 case. The regression requires the `.app` directory inode to remain unchanged.
 
 Internal official macOS packages use the canonical `OpenGlance.app` bundle and ZIP root with the hidden
-`CFBundleExecutable=Git Leaf`. Before ShipIt installs into a legacy `Git Leaf.app`, OpenGlance
-atomically sets `useUpdateBundleName=true` only when the parent directory is writable, allowing ShipIt
-to move the existing bundle to `OpenGlance.app`. With a non-writable parent it sets the value to `false`,
-preserving the outer path while updating signed `Contents` in place. Both outcomes preserve one App and
-the same Profile. Public official and Community packages use the canonical executable and their
-OpenGlance-native Bundle IDs; they do not inherit the internal machine identity.
+`CFBundleExecutable=Git Leaf`. ShipIt's `useUpdateBundleName` is always set to `false`: Squirrel derives
+its proposed name from the executable, so enabling it cannot migrate the legacy internal App and can
+revert an already canonical path. The newly installed App instead migrates `Git Leaf.app` to its
+`OpenGlance.app` sibling on startup, after its helper confirms readiness and the old instance exits.
+It preserves the original App directory inode, signed Contents, Bundle ID, executable, launch arguments,
+and Profile. A non-writable parent or occupied destination leaves the App usable at its existing path;
+a failed relaunch restores that path and prevents an immediate retry loop. Public official and Community
+packages retain their canonical executable and OpenGlance-native Bundle IDs.
 
 This gate validates installation of the final signed package and its cleanup contract. It is not a
 feature-by-feature UI test, and it is not repeated after releases whose recorded risk assessment does

@@ -19,6 +19,7 @@ import process from "node:process";
 
 import { openGlanceEnvironmentValue } from "../environment.mjs";
 import { createDesktopUpdateController } from "./updates.mjs";
+import { startMacAppNameMigration } from "./mac-app-name-migration.mjs";
 import { configureMacUpdateInstallation } from "./mac-update-installation.mjs";
 import {
   macShipItJobLabelForBuildInfo,
@@ -180,6 +181,7 @@ let isRepositoryTransitioning = false;
 let isRepositoryPanelOpen = false;
 let isDesktopReady = false;
 let pendingDesktopOpenRequest = null;
+let pendingDesktopOpenUrl = "";
 let telemetryClient = null;
 let telemetryActivityTracker = null;
 let telemetryUploadScheduler = null;
@@ -246,6 +248,7 @@ if (windowsBootstrap.status === "current") {
     const request = parseDesktopArgs([url]);
     if (!isDesktopReady) {
       pendingDesktopOpenRequest = request;
+      pendingDesktopOpenUrl = url;
       return;
     }
     void openDesktopRequest(request);
@@ -2977,6 +2980,19 @@ if (manualWindowsBootstrapBlocked) {
   });
 
   app.whenReady().then(async () => {
+    if (await startMacAppNameMigration({
+      app,
+      launchArgs: () => [
+        ...process.argv.slice(1),
+        ...(pendingDesktopOpenUrl ? [pendingDesktopOpenUrl] : []),
+      ],
+    })) {
+      // No repositories or persistent configuration have been loaded by this instance.
+      // The helper waits for exit and restarts the same Profile at the canonical path.
+      isQuitting = true;
+      app.exit(0);
+      return;
+    }
     await initializeDesktopCommandEnvironment();
     await loadDesktopRepositoryState();
     installAboutPanelOptions();

@@ -77,7 +77,7 @@ test("macOS update installation preserves the canonical App directory name", asy
   );
 });
 
-test("macOS update installation lets ShipIt rename a writable Git Leaf app", async () => {
+test("macOS update installs Contents at the legacy path before the new App migrates its name", async () => {
   const homeDir = await mkdtemp(path.join(tmpdir(), "openglance-mac-update-rename-"));
   const paths = macUpdateCachePaths({ homeDir });
   const stagedDirectory = path.join(paths.updateRoot, "update.NEW5678");
@@ -96,17 +96,16 @@ test("macOS update installation lets ShipIt rename a writable Git Leaf app", asy
   const result = await prepareMacUpdateAppPath({
     homeDir,
     targetAppPath: targetApp,
-    accessFn: async () => {},
   });
 
-  assert.equal(result.useUpdateBundleName, true);
+  assert.equal(result.useUpdateBundleName, false);
   assert.equal(
     JSON.parse(await readFile(paths.stateFile, "utf8")).useUpdateBundleName,
-    true,
+    false,
   );
 });
 
-test("macOS update installation keeps a non-writable Git Leaf app path upgradeable", async () => {
+test("macOS update overrides an earlier executable-name rename request for the legacy App", async () => {
   const homeDir = await mkdtemp(path.join(tmpdir(), "openglance-mac-update-no-rename-"));
   const paths = macUpdateCachePaths({ homeDir });
   const stagedDirectory = path.join(paths.updateRoot, "update.NEW5678");
@@ -125,9 +124,6 @@ test("macOS update installation keeps a non-writable Git Leaf app path upgradeab
   const result = await prepareMacUpdateAppPath({
     homeDir,
     targetAppPath: targetApp,
-    accessFn: async () => {
-      throw Object.assign(new Error("permission denied"), { code: "EACCES" });
-    },
   });
 
   assert.equal(result.useUpdateBundleName, false);

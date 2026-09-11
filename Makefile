@@ -16,6 +16,9 @@ install-dev-mac:
 smoke-dev-mac:
 	node scripts/release-mac.mjs dev-smoke
 
+smoke-app-name-mac:
+	OPENGLANCE_SMOKE_SCENARIO=mac-app-name $(MAKE) smoke-dev-mac
+
 smoke-tree-tooltip-mac:
 	node scripts/smoke-tree-tooltip-mac.mjs
 
@@ -88,4 +91,4 @@ stage-updates-win:
 publish-updates-win:
 	$(win-release-env) node scripts/release-windows.mjs publish-updates
 
-.PHONY: package-mac install-dev-mac smoke-dev-mac smoke-tree-tooltip-mac smoke-remote-sync-mac smoke-live-table-mac smoke-document-changes-mac smoke-document-baseline-mac smoke-commit-summary-mac smoke-repository-recovery-mac smoke-document-links-mac verify-dev-handoff-mac check-release-prereqs sign-mac dmg-mac notarize-mac staple-mac zip-mac verify-release-mac release-mac stage-updates-mac publish-updates-mac package-win release-win stage-updates-win publish-updates-win
+.PHONY: package-mac install-dev-mac smoke-dev-mac smoke-app-name-mac smoke-tree-tooltip-mac smoke-remote-sync-mac smoke-live-table-mac smoke-document-changes-mac smoke-document-baseline-mac smoke-commit-summary-mac smoke-repository-recovery-mac smoke-document-links-mac verify-dev-handoff-mac check-release-prereqs sign-mac dmg-mac notarize-mac staple-mac zip-mac verify-release-mac release-mac stage-updates-mac publish-updates-mac package-win release-win stage-updates-win publish-updates-win

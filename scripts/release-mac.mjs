@@ -971,6 +971,7 @@ function releaseOptionsFromEnv() {
       || DEFAULT_SMOKE_USER_DATA_DIR,
     smokeRepoRoot: openGlanceEnvironmentValue(process.env, "SMOKE_REPO_ROOT") || "",
     smokeFile: openGlanceEnvironmentValue(process.env, "SMOKE_FILE") || "",
+    smokeScenario: openGlanceEnvironmentValue(process.env, "SMOKE_SCENARIO") || "",
     smokeRemoteDebuggingPort:
       openGlanceEnvironmentValue(process.env, "SMOKE_REMOTE_DEBUGGING_PORT") || "",
     formalRelease: openGlanceEnvironmentFlag(process.env, "FORMAL_RELEASE"),
@@ -1344,6 +1345,13 @@ function refreshDevelopmentAppIcon(paths) {
 }
 
 function launchDevelopmentApp(options, paths, { wait = false } = {}) {
+  if (options.smoke && options.smokeScenario === "mac-app-name") {
+    return run(process.execPath, [
+      path.join(REPO_ROOT, "scripts", "smoke-mac-app-name.mjs"),
+      paths.installedAppDir,
+      macDevelopmentUserDataPaths(options).devUserDataDir,
+    ]);
+  }
   const [command, args] = launchDevelopmentAppCommand(paths, {
     userDataDir: options.smoke
       ? macDevelopmentUserDataPaths(options).devUserDataDir
