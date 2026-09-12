@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
@@ -49,6 +50,16 @@ export const RELEASE_PACKAGE_IGNORE_PATTERNS = [
 
 const RELEASE_TRACKS = new Set(["source", "public", "internal"]);
 const OFFICIAL_RELEASE_TRACKS = new Set(["public", "internal"]);
+const RELEASE_SSH_OPTIONS = [
+  "-o",
+  "ConnectTimeout=20",
+  "-o",
+  "ServerAliveInterval=15",
+  "-o",
+  "ServerAliveCountMax=4",
+];
+const RELEASE_RSYNC_SHELL =
+  "ssh -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4";
 
 export const COMMUNITY_PACKAGE_IDENTITY = Object.freeze({
   macBundleId: "org.openglance.community",
@@ -229,6 +240,59 @@ export function releaseTrackUpdateChannel(releaseTrack = "source") {
 export function releaseUpdateChannel({ releaseTrack = "source", override } = {}) {
   const explicitChannel = String(override || "").trim();
   return explicitChannel || releaseTrackUpdateChannel(releaseTrack);
+}
+
+export function publishUpdateDirectory({
+  localDir,
+  remoteHost,
+  remotePath,
+  runCommand,
+} = {}) {
+  if (
+    !String(localDir || "").trim()
+    || !String(remoteHost || "").trim()
+    || !String(remotePath || "").trim()
+    || typeof runCommand !== "function"
+  ) {
+    throw new TypeError(
+      "Update publication requires localDir, remoteHost, remotePath, and runCommand",
+    );
+  }
+  const manifestBytes = readFileSync(path.join(localDir, "latest.json"));
+  const uploadKey = createHash("sha256").update(manifestBytes).digest("hex");
+  const incomingPath = `${remotePath}.incoming-${uploadKey}`;
+  const previousPath = `${remotePath}.previous`;
+
+  runCommand("ssh", [
+    ...RELEASE_SSH_OPTIONS,
+    remoteHost,
+    `mkdir -p ${shellQuote(incomingPath)} ${shellQuote(path.posix.dirname(remotePath))}`,
+  ]);
+  runCommand("rsync", [
+    "-az",
+    "--delete",
+    "--partial",
+    "--timeout=60",
+    "-e",
+    RELEASE_RSYNC_SHELL,
+    `${localDir}/`,
+    `${remoteHost}:${incomingPath}/`,
+  ]);
+  runCommand("ssh", [
+    ...RELEASE_SSH_OPTIONS,
+    remoteHost,
+    [
+      `rm -rf ${shellQuote(previousPath)}`,
+      `if [ -d ${shellQuote(remotePath)} ]; then mv ${shellQuote(remotePath)} ${shellQuote(previousPath)}; fi`,
+      `mv ${shellQuote(incomingPath)} ${shellQuote(remotePath)}`,
+      `rm -rf ${shellQuote(previousPath)}`,
+    ].join(" && "),
+  ]);
+  return { incomingPath, uploadKey };
+}
+
+function shellQuote(value) {
+  return `'${String(value).replace(/'/g, "'\\''")}'`;
 }
 
 export function releaseTagName({ version } = {}) {

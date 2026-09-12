@@ -15,6 +15,9 @@ the [OpenGlance download page](https://gitleaf.mangofuture.com/download).
 
 - Allowed the development-handoff release regression to preserve a provably completed dormant ShipIt
   registration while continuing to block active, failed, staged, changed, or unclassifiable jobs.
+- Made interrupted candidate and stable uploads resumable through manifest-bound staging directories,
+  bounded SSH keepalives, and rsync partial transfers without weakening atomic promotion or checksum
+  verification.
 
 ## 3.2.3 — 2026-09-12 (internal release)
 

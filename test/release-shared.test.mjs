@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -14,6 +14,7 @@ import {
   OFFICIAL_INTERNAL_PACKAGE_IDENTITY,
   OFFICIAL_PACKAGE_IDENTITY,
   OFFICIAL_PUBLIC_PACKAGE_IDENTITY,
+  publishUpdateDirectory,
   RELEASE_PACKAGE_IGNORE_PATTERNS,
   releaseArtifactFileName,
   releaseBuildId,
@@ -38,6 +39,41 @@ test("electronPackagerCommand invokes the package JS entry through node", () => 
 
 test("releaseTagName derives a stable git tag from the shared app version", () => {
   assert.equal(releaseTagName({ version: "0.1.1" }), "v0.1.1");
+});
+
+test("update publication resumes one manifest-bound incoming directory", async (t) => {
+  const localDir = await mkdtemp(path.join(tmpdir(), "openglance-publish-resume-"));
+  t.after(() => rm(localDir, { recursive: true, force: true }));
+  await writeFile(path.join(localDir, "latest.json"), "{\"version\":\"3.2.4\"}\n");
+  const calls = [];
+  const runCommand = (command, args) => calls.push({ command, args });
+  const options = {
+    localDir,
+    remoteHost: "release-host",
+    remotePath: "/srv/updates/internal-candidate/darwin-universal",
+    runCommand,
+  };
+
+  const first = publishUpdateDirectory(options);
+  const second = publishUpdateDirectory(options);
+  assert.equal(first.incomingPath, second.incomingPath);
+  assert.match(first.incomingPath, /\.incoming-[a-f0-9]{64}$/);
+
+  const prepare = calls[0];
+  assert.equal(prepare.command, "ssh");
+  assert.match(prepare.args.at(-1), /mkdir -p/);
+  assert.doesNotMatch(prepare.args.at(-1), /rm -rf .*incoming/);
+
+  const upload = calls[1];
+  assert.equal(upload.command, "rsync");
+  assert.ok(upload.args.includes("--partial"));
+  assert.ok(upload.args.includes("--timeout=60"));
+  assert.match(upload.args.at(-1), new RegExp(`${first.uploadKey}/$`));
+  assert.match(upload.args[upload.args.indexOf("-e") + 1], /ServerAliveInterval=15/);
+
+  await writeFile(path.join(localDir, "latest.json"), "{\"version\":\"3.2.5\"}\n");
+  const changed = publishUpdateDirectory(options);
+  assert.notEqual(changed.incomingPath, first.incomingPath);
 });
 
 test("releaseArtifactFileName keeps downloadable artifact names short and shell friendly", () => {

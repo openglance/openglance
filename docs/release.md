@@ -343,6 +343,12 @@ Hash equality binds those local platform checks to the published artifact withou
 transfer. These worktree-local files remain the source for the final local archive; `finish` must not
 download another copy from the network.
 
+Candidate and stable uploads use an incoming directory keyed by the staged `latest.json` SHA-256.
+Interrupted rsync transfers retain only that immutable candidate's partial bytes and retry into the
+same directory with bounded SSH liveness checks. A different manifest selects a different incoming
+directory. Publication still becomes visible only through the existing remote directory swap, and the
+subsequent official-URL byte count and SHA-256 verification remains mandatory.
+
 Then record candidate verification:
 
 ```bash

@@ -23,6 +23,7 @@ import {
   electronPackagerCommand,
   ensureReleaseGitTag,
   packageVersion,
+  publishUpdateDirectory,
   releaseArtifactFileName,
   releaseBuildId,
   releaseBuildInfoFromEnv,
@@ -336,6 +337,7 @@ function publishWindowsUpdates(options) {
       channel: options.updateChannel,
       platformKey: "win32-x64",
     }),
+    runCommand: run,
   });
 }
 
@@ -361,32 +363,6 @@ function sha256File(filePath) {
 
 function writeJson(filePath, value) {
   writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
-}
-
-function publishUpdateDirectory({ localDir, remoteHost, remotePath }) {
-  const incomingPath = `${remotePath}.incoming-${Date.now()}`;
-  const previousPath = `${remotePath}.previous`;
-  run("ssh", [
-    remoteHost,
-    [
-      `rm -rf ${shellQuote(incomingPath)}`,
-      `mkdir -p ${shellQuote(incomingPath)} ${shellQuote(path.posix.dirname(remotePath))}`,
-    ].join(" && "),
-  ]);
-  run("rsync", ["-az", "--delete", `${localDir}/`, `${remoteHost}:${incomingPath}/`]);
-  run("ssh", [
-    remoteHost,
-    [
-      `rm -rf ${shellQuote(previousPath)}`,
-      `if [ -d ${shellQuote(remotePath)} ]; then mv ${shellQuote(remotePath)} ${shellQuote(previousPath)}; fi`,
-      `mv ${shellQuote(incomingPath)} ${shellQuote(remotePath)}`,
-      `rm -rf ${shellQuote(previousPath)}`,
-    ].join(" && "),
-  ]);
-}
-
-function shellQuote(value) {
-  return `'${String(value).replace(/'/g, "'\\''")}'`;
 }
 
 function runTests() {

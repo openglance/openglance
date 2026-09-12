@@ -41,6 +41,7 @@ import {
   electronPackagerCommand,
   ensureReleaseGitTag,
   packageVersion,
+  publishUpdateDirectory,
   releaseArtifactFileName,
   releaseBuildId,
   releaseBuildInfoFromEnv,
@@ -1691,6 +1692,7 @@ function publishMacUpdates(options, paths) {
       channel: options.updateChannel,
       platformKey: "darwin-universal",
     }),
+    runCommand: run,
   });
   publishUpdateDirectory({
     localDir: arm64MigrationPaths.updateDir,
@@ -1700,6 +1702,7 @@ function publishMacUpdates(options, paths) {
       channel: options.updateChannel,
       platformKey: "darwin-arm64",
     }),
+    runCommand: run,
   });
 }
 
@@ -1765,32 +1768,6 @@ function writeUpdateManifests(paths, manifest) {
     current: manifest.version,
     releases: [manifest],
   });
-}
-
-function publishUpdateDirectory({ localDir, remoteHost, remotePath }) {
-  const incomingPath = `${remotePath}.incoming-${Date.now()}`;
-  const previousPath = `${remotePath}.previous`;
-  run("ssh", [
-    remoteHost,
-    [
-      `rm -rf ${shellQuote(incomingPath)}`,
-      `mkdir -p ${shellQuote(incomingPath)} ${shellQuote(path.posix.dirname(remotePath))}`,
-    ].join(" && "),
-  ]);
-  run("rsync", ["-az", "--delete", `${localDir}/`, `${remoteHost}:${incomingPath}/`]);
-  run("ssh", [
-    remoteHost,
-    [
-      `rm -rf ${shellQuote(previousPath)}`,
-      `if [ -d ${shellQuote(remotePath)} ]; then mv ${shellQuote(remotePath)} ${shellQuote(previousPath)}; fi`,
-      `mv ${shellQuote(incomingPath)} ${shellQuote(remotePath)}`,
-      `rm -rf ${shellQuote(previousPath)}`,
-    ].join(" && "),
-  ]);
-}
-
-function shellQuote(value) {
-  return `'${String(value).replace(/'/g, "'\\''")}'`;
 }
 
 function runTests() {
