@@ -436,7 +436,11 @@ temporary App opens and restarts on the current desktop, but the Agent supplies 
 maintainer for another confirmation once the development or release workflow is authorized. Each
 transition action is clicked at most once;
 a failed helper may not create an automated restart loop. The harness refuses to run while the
-installed human App or either official/community ShipIt job is active.
+installed human App or either official/community ShipIt job is active, failed, still owns a staged
+update, or cannot be classified safely. It may accept a completed dormant user job only when it exited
+successfully, belongs to the installed App, and its staged-update directory no longer exists. Because
+the development handoff must not invoke Squirrel, the harness preserves any such preexisting dormant
+registration byte-for-byte and fails if it changes or if a new ShipIt job appears.
 
 An update regression that requests system account credentials or starts a privileged Helper is a
 failure, not an installation step. Do not authorize it or manually load, unload, or boot out ShipIt jobs

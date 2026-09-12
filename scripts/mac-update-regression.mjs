@@ -303,6 +303,7 @@ function hostPaths({ homeDir = homedir() } = {}) {
 
 export function assertCurrentHostSafe({
   allowedDormantUserShipItLabels = [],
+  shipItJobLabels = OFFICIAL_SHIPIT_JOB_LABELS,
 } = {}) {
   const homeDir = homedir();
   const paths = hostPaths({ homeDir });
@@ -313,9 +314,10 @@ export function assertCurrentHostSafe({
     path.join(appPath, "Contents", "MacOS", "OpenGlance"),
     path.join(appPath, "Contents", "MacOS", "Git Leaf"),
   ]);
+  const checkedShipItJobLabels = [...new Set(shipItJobLabels)];
   const allowedDormantLabels = new Set(allowedDormantUserShipItLabels);
   const preexistingDormantUserShipItJobs = [];
-  const userShipItJobExists = OFFICIAL_SHIPIT_JOB_LABELS.some((label) => {
+  const userShipItJobExists = checkedShipItJobLabels.some((label) => {
     const details = launchctlJobDetails({ domain: "user", label });
     if (!details.exists) return false;
     if (
@@ -339,7 +341,7 @@ export function assertCurrentHostSafe({
         (executable) => command.trim().startsWith(executable),
       )),
     userShipItJobExists,
-    systemShipItJobExists: OFFICIAL_SHIPIT_JOB_LABELS.some((label) => (
+    systemShipItJobExists: checkedShipItJobLabels.some((label) => (
       launchctlJobExists({ domain: "system", label })
     )),
   });
@@ -350,7 +352,7 @@ export function assertCurrentHostSafe({
     }),
     realShipItFingerprint: developmentProfileFingerprint({
       productionUserDataDir: paths.realShipItCacheRoot,
-      entries: OFFICIAL_SHIPIT_JOB_LABELS,
+      entries: checkedShipItJobLabels,
     }),
     preexistingDormantUserShipItJobs,
   };

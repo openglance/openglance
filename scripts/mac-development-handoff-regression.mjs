@@ -55,13 +55,14 @@ import {
 import {
   SHIPIT_JOB_LABEL,
   assertCurrentHostSafe,
-  assertSafeMacUpdateRegressionHost,
   bootoutUserShipItJob,
   delay,
   downloadUpdateRegressionArtifact,
   evaluateInRenderer,
   extractSingleApp,
   fileContract,
+  isUnchangedPreexistingShipItJob,
+  launchctlJobDetails,
   launchctlJobExists,
   readAppVersion,
   rewriteCandidateForLocalStable,
@@ -151,14 +152,17 @@ export function validateDevelopmentHandoffBuildPair({
 export function validateDevelopmentHandoffRegressionEvidence(evidence) {
   const requiredCleanup = [
     "processesTerminated",
-    "userShipItJobAbsent",
-    "systemShipItJobAbsent",
+    "userShipItJobsUnchangedOrAbsent",
+    "systemShipItJobsAbsent",
+    "preexistingDormantUserShipItJobsPreserved",
     "isolatedCacheRemovedWithTemporaryRoot",
     "realProfileUnchanged",
     "realShipItCacheUnchanged",
   ];
+  const preexistingDormantLabels =
+    evidence?.preexistingDormantUserShipItJobLabels;
   if (
-    evidence?.schemaVersion !== 1
+    evidence?.schemaVersion !== 2
     || evidence?.source !== "git-leaf-macos-development-handoff-regression"
     || evidence?.status !== "passed"
     || evidence?.platform !== "darwin-universal"
@@ -184,6 +188,11 @@ export function validateDevelopmentHandoffRegressionEvidence(evidence) {
     || evidence?.appDirectoryInodePreserved !== true
     || evidence?.installParentWritable !== false
     || evidence?.privilegedShipItJobObserved !== false
+    || !Array.isArray(preexistingDormantLabels)
+    || new Set(preexistingDormantLabels).size !== preexistingDormantLabels.length
+    || preexistingDormantLabels.some(
+      (label) => !HANDOFF_SHIPIT_JOB_LABELS.includes(label),
+    )
     || !sameFingerprint(evidence?.realProfileBefore, evidence?.realProfileAfter)
     || !sameFingerprint(
       evidence?.realShipItCacheBefore,
@@ -246,7 +255,10 @@ export async function runDevelopmentHandoffRegression({
     );
   }
   const host = assertDevelopmentHandoffHostSafe();
-  const realShipItCacheBefore = realShipItCacheFingerprint();
+  const preexistingDormantUserShipItJobs = new Map(
+    host.preexistingDormantUserShipItJobs.map((job) => [job.label, job]),
+  );
+  const realShipItCacheBefore = host.realShipItFingerprint;
   const temporaryRoot = mkdtempSync(
     path.join(tmpdir(), "git-leaf-mac-development-handoff."),
   );
@@ -538,7 +550,7 @@ export async function runDevelopmentHandoffRegression({
       path.join(userDataDir, "desktop-config.json"),
     );
     passedEvidence = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       source: "git-leaf-macos-development-handoff-regression",
       status: "passed",
       platform: PLATFORM_KEY,
@@ -565,6 +577,9 @@ export async function runDevelopmentHandoffRegression({
       appDirectoryInodePreserved: true,
       installParentWritable: false,
       privilegedShipItJobObserved: false,
+      preexistingDormantUserShipItJobLabels: [
+        ...preexistingDormantUserShipItJobs.keys(),
+      ],
       sourceSquirrelPolicy,
       targetSquirrelPolicy,
       installedSquirrelPolicy,
@@ -610,16 +625,35 @@ export async function runDevelopmentHandoffRegression({
     }
     for (const label of HANDOFF_SHIPIT_JOB_LABELS) {
       try {
+        const currentJob = launchctlJobDetails({ domain: "user", label });
+        if (isUnchangedPreexistingShipItJob({
+          currentJob,
+          preexistingJob: preexistingDormantUserShipItJobs.get(label),
+        })) {
+          continue;
+        }
         bootoutUserShipItJob(temporaryRoot, { label });
       } catch (error) {
         cleanupErrors.push(error);
       }
     }
     try {
+      const remainingUserShipItJobs = HANDOFF_SHIPIT_JOB_LABELS
+        .map((label) => ({
+          label,
+          details: launchctlJobDetails({ domain: "user", label }),
+        }))
+        .filter(({ details }) => details.exists);
+      const onlyPreservedDormantJobs = remainingUserShipItJobs.every(
+        ({ label, details }) => isUnchangedPreexistingShipItJob({
+          currentJob: details,
+          preexistingJob: preexistingDormantUserShipItJobs.get(label),
+        }),
+      );
+      if (!onlyPreservedDormantJobs) {
+        throw new Error("An unexpected per-user ShipIt job remained after cleanup");
+      }
       for (const label of HANDOFF_SHIPIT_JOB_LABELS) {
-        if (launchctlJobExists({ domain: "user", label })) {
-          throw new Error(`The per-user ShipIt job remained: ${label}`);
-        }
         if (launchctlJobExists({ domain: "system", label })) {
           throw new Error(`A system ShipIt job remained: ${label}`);
         }
@@ -628,7 +662,9 @@ export async function runDevelopmentHandoffRegression({
       cleanupErrors.push(error);
     }
     try {
-      const realProfileAfter = fingerprintRealProfile();
+      const realProfileAfter = developmentProfileFingerprint({
+        productionUserDataDir: host.productionProfilePath,
+      });
       const realShipItCacheAfter = realShipItCacheFingerprint();
       if (!sameFingerprint(host.productionFingerprint, realProfileAfter)) {
         throw new Error("The real OpenGlance Profile changed during handoff regression");
@@ -641,8 +677,9 @@ export async function runDevelopmentHandoffRegression({
         passedEvidence.realShipItCacheAfter = realShipItCacheAfter;
         passedEvidence.cleanup = {
           processesTerminated: true,
-          userShipItJobAbsent: true,
-          systemShipItJobAbsent: true,
+          userShipItJobsUnchangedOrAbsent: true,
+          systemShipItJobsAbsent: true,
+          preexistingDormantUserShipItJobsPreserved: true,
           isolatedCacheRemovedWithTemporaryRoot: true,
           realProfileUnchanged: true,
           realShipItCacheUnchanged: true,
@@ -717,36 +754,10 @@ function packageSourceDevelopmentApp({ outputDir, version } = {}) {
 }
 
 function assertDevelopmentHandoffHostSafe() {
-  const host = assertCurrentHostSafe();
-  assertSafeMacUpdateRegressionHost({
-    platform: process.platform,
-    productionAppRunning: false,
-    userShipItJobExists: launchctlJobExists({
-      domain: "user",
-      label: SOURCE_SHIPIT_JOB_LABEL,
-    }),
-    systemShipItJobExists: launchctlJobExists({
-      domain: "system",
-      label: SOURCE_SHIPIT_JOB_LABEL,
-    }),
+  return assertCurrentHostSafe({
+    shipItJobLabels: HANDOFF_SHIPIT_JOB_LABELS,
+    allowedDormantUserShipItLabels: HANDOFF_SHIPIT_JOB_LABELS,
   });
-  assertSafeMacUpdateRegressionHost({
-    platform: process.platform,
-    productionAppRunning: false,
-    userShipItJobExists: launchctlJobExists({
-      domain: "user",
-      label: LEGACY_SOURCE_SHIPIT_JOB_LABEL,
-    }),
-    systemShipItJobExists: launchctlJobExists({
-      domain: "system",
-      label: LEGACY_SOURCE_SHIPIT_JOB_LABEL,
-    }),
-  });
-  return host;
-}
-
-function fingerprintRealProfile() {
-  return assertCurrentHostSafe().productionFingerprint;
 }
 
 function realShipItCacheFingerprint() {

@@ -155,7 +155,7 @@ test("development handoff regression derives a strictly lower stable source vers
 test("development handoff evidence requires the real installation and isolation outcomes", () => {
   const fingerprint = { sha256: "a".repeat(64), fileCount: 3 };
   const evidence = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     source: "git-leaf-macos-development-handoff-regression",
     status: "passed",
     platform: "darwin-universal",
@@ -179,14 +179,18 @@ test("development handoff evidence requires the real installation and isolation 
     appDirectoryInodePreserved: true,
     installParentWritable: false,
     privilegedShipItJobObserved: false,
+    preexistingDormantUserShipItJobLabels: [
+      "com.mangofuture.gitleaf.ShipIt",
+    ],
     realProfileBefore: fingerprint,
     realProfileAfter: fingerprint,
     realShipItCacheBefore: fingerprint,
     realShipItCacheAfter: fingerprint,
     cleanup: {
       processesTerminated: true,
-      userShipItJobAbsent: true,
-      systemShipItJobAbsent: true,
+      userShipItJobsUnchangedOrAbsent: true,
+      systemShipItJobsAbsent: true,
+      preexistingDormantUserShipItJobsPreserved: true,
       isolatedCacheRemovedWithTemporaryRoot: true,
       realProfileUnchanged: true,
       realShipItCacheUnchanged: true,
@@ -204,6 +208,13 @@ test("development handoff evidence requires the real installation and isolation 
     { handoffReceiptConsumed: false },
     { appDirectoryInodePreserved: false },
     { privilegedShipItJobObserved: true },
+    { preexistingDormantUserShipItJobLabels: ["unexpected.ShipIt"] },
+    {
+      cleanup: {
+        ...evidence.cleanup,
+        preexistingDormantUserShipItJobsPreserved: false,
+      },
+    },
     { targetTeamIdentifier: "UNKNOWN" },
     { targetExecutable: "OpenGlance" },
     { realProfileAfter: { sha256: "b".repeat(64), fileCount: 3 } },

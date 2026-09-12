@@ -4,6 +4,18 @@ OpenGlance follows Semantic Versioning for its shared app version. Git tags iden
 official public artifacts, signatures, checksums, and platform availability are authoritative only on
 the [OpenGlance download page](https://gitleaf.mangofuture.com/download).
 
+## 3.2.4 — 2026-09-13 (internal release)
+
+### Changed
+
+- Sorted repository folders before files and applied natural filename ordering consistently in the
+  server tree and sidebar navigation.
+
+### Fixed
+
+- Allowed the development-handoff release regression to preserve a provably completed dormant ShipIt
+  registration while continuing to block active, failed, staged, changed, or unclassifiable jobs.
+
 ## 3.2.3 — 2026-09-12 (internal release)
 
 ### Fixed
