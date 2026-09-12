@@ -240,7 +240,7 @@ function finalizeDirectory(directory) {
 function sortNodes(nodes) {
   return nodes.sort((left, right) => {
     if (left.type !== right.type) {
-      return left.type === "file" ? -1 : 1;
+      return left.type === "directory" ? -1 : 1;
     }
     if (left.type === "directory") {
       const leftUnderscoreRank = left.name.startsWith("_") ? 1 : 0;
@@ -249,7 +249,7 @@ function sortNodes(nodes) {
         return leftUnderscoreRank - rightUnderscoreRank;
       }
     }
-    return left.name.localeCompare(right.name, "zh-Hans-CN");
+    return left.name.localeCompare(right.name, "zh-Hans-CN", { numeric: true });
   });
 }
 

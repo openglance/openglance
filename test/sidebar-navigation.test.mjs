@@ -224,3 +224,20 @@ test("sync view does not duplicate an existing file node", () => {
     ],
   }]);
 });
+
+test("sync inserts deleted paths with folders first and natural name order", () => {
+  const existing = [
+    { type: "directory", name: "docs10", children: [
+      { type: "file", name: "chapter10.md", path: "docs10/chapter10.md" },
+    ] },
+    { type: "file", name: "10.md", path: "10.md" },
+  ];
+  const result = sidebarTreeForView(existing, {
+    view: "sync",
+    changedPaths: ["10.md", "docs10/chapter10.md"],
+    gitChanges: ["2.md", "docs2/README.md", "_draft10/README.md", "_draft2/README.md",
+      "docs10/chapter2.md", "docs10/nested/README.md"].map((path) => ({ path, status: "deleted" })),
+  });
+  assert.deepEqual(result.map((node) => node.name), ["docs2", "docs10", "_draft2", "_draft10", "2.md", "10.md"]);
+  assert.deepEqual(result[1].children.map((node) => node.name), ["nested", "chapter2.md", "chapter10.md"]);
+});

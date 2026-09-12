@@ -175,7 +175,7 @@ JSX, JavaScript, imports, or scripts.
 - All, Favorites, and Sync views, with a content-focused tree or the complete repository tree. Markdown
   and MDX files with non-Chinese source names show their document title below the unchanged filename by
   default. The filename is slightly muted so the title is easier to scan; this second line can be turned
-  off for a compact tree.
+  off for a compact tree. Folders appear before files, with natural filename ordering (`2` before `10`).
 - Compact document tabs use that same filename-and-title hierarchy whenever a distinct human title is
   available, while keeping the full repository-relative path in the hover tooltip.
 - A searchable, drag-reorderable repository panel for opening, switching, and removing repositories from

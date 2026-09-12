@@ -64,6 +64,10 @@ to show filenames only; the stored tab identity and navigation history still use
 The folder structure is the primary way to understand where a document belongs. Expand folders and
 select a file just as you would in a familiar file browser.
 
+At every directory level, folders appear before files. Both use natural filename order, so `2` comes
+before `10` and `chapter2.md` before `chapter10.md`. Folders beginning with `_` appear after other
+folders, still before files. Favorites keep their saved top-level order.
+
 For a Markdown or MDX filename written without Chinese characters, OpenGlance keeps the source filename
 on the first line and shows a distinct document title underneath when frontmatter `title` or the first
 level-one heading provides one. Chinese filenames and documents without a distinct title stay on one

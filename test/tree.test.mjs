@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -28,7 +28,6 @@ test("buildMarkdownTree returns nested markdown and mdx files only", async () =>
   const tree = await buildMarkdownTree(repoRoot);
 
   assert.deepEqual(tree, [
-    { type: "file", name: "README.md", path: "README.md", kind: "markdown" },
     {
       type: "directory",
       name: "product",
@@ -42,6 +41,7 @@ test("buildMarkdownTree returns nested markdown and mdx files only", async () =>
         },
       ],
     },
+    { type: "file", name: "README.md", path: "README.md", kind: "markdown" },
   ]);
 });
 
@@ -112,14 +112,6 @@ test("buildFileTree includes every tracked or unignored repository file", async 
   const tree = await buildFileTree(repoRoot);
 
   assert.deepEqual(tree, [
-    { type: "file", name: ".gitignore", path: ".gitignore", kind: "code" },
-    {
-      type: "file",
-      name: "README.md",
-      path: "README.md",
-      kind: "markdown",
-      title: "Root",
-    },
     {
       type: "directory",
       name: "docs",
@@ -132,6 +124,14 @@ test("buildFileTree includes every tracked or unignored repository file", async 
         { type: "file", name: "script.js", path: "docs/script.js", kind: "code" },
         { type: "file", name: "slides.pptx", path: "docs/slides.pptx", kind: "unknown" },
       ],
+    },
+    { type: "file", name: ".gitignore", path: ".gitignore", kind: "code" },
+    {
+      type: "file",
+      name: "README.md",
+      path: "README.md",
+      kind: "markdown",
+      title: "Root",
     },
   ]);
 });
@@ -202,4 +202,29 @@ test("buildMarkdownTree sorts underscore directories after regular directories",
     tree.map((node) => node.name),
     ["apps", "knowledge", "_archive", "_drafts"],
   );
+});
+
+test("repository trees put folders first and naturally order names at every depth", async (t) => {
+  const repoRoot = await mkdtemp(path.join(tmpdir(), "openglance-tree-order-"));
+  t.after(() => rm(repoRoot, { recursive: true, force: true }));
+  await initializeRepository(repoRoot);
+  const folders = ["10", "2", "beta", "alpha10", "alpha2", "_draft10", "_draft2"];
+  const files = ["10.md", "2.md", "beta.md", "alpha10.md", "alpha2.md", "第10章.md", "第2章.md"];
+  for (const parent of ["", "2"]) {
+    for (const folder of folders) {
+      const directory = path.join(repoRoot, parent, folder);
+      await mkdir(directory, { recursive: true });
+      await writeFile(path.join(directory, "README.md"), "# Folder\n");
+    }
+    for (const file of files) {
+      await writeFile(path.join(repoRoot, parent, file), "# Display title does not control order\n");
+    }
+  }
+  const expected = ["2", "10", "alpha2", "alpha10", "beta", "_draft2", "_draft10",
+    "2.md", "10.md", "第2章.md", "第10章.md", "alpha2.md", "alpha10.md", "beta.md"];
+  for (const build of [buildMarkdownTree, buildFileTree]) {
+    const tree = await build(repoRoot);
+    assert.deepEqual(tree.filter((node) => node.name !== ".gitignore").map((node) => node.name), expected);
+    assert.deepEqual(tree.find((node) => node.name === "2").children.map((node) => node.name), [...expected, "README.md"]);
+  }
 });
