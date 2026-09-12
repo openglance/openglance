@@ -182,6 +182,109 @@ export function launchctlJobDetails({
   };
 }
 
+function launchctlTopLevelValue(output, key) {
+  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return String(output || "")
+    .match(new RegExp(`^\\t${escapedKey} = (.+)$`, "m"))?.[1]
+    ?.trim() || "";
+}
+
+function shipItProgramBelongsToApp(program, appPath) {
+  const relative = path.relative(path.resolve(appPath), path.resolve(program));
+  if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) {
+    return false;
+  }
+  return /^Contents\/Frameworks\/Squirrel\.framework\/(?:Versions\/(?:A|Current)\/)?Resources\/ShipIt$/
+    .test(relative.split(path.sep).join("/"));
+}
+
+function localFilePathFromUrl(value) {
+  try {
+    const parsed = new URL(String(value || ""));
+    if (parsed.protocol !== "file:") return "";
+    return fileURLToPath(parsed);
+  } catch {
+    return "";
+  }
+}
+
+export function isCompletedDormantShipItJob({
+  details,
+  homeDir = homedir(),
+  label = SHIPIT_JOB_LABEL,
+  productionAppPaths = hostPaths({ homeDir }).productionAppPaths,
+  exists = existsSync,
+  lstat = lstatSync,
+  readFile = readFileSync,
+} = {}) {
+  if (!details?.exists) return false;
+  const output = String(details.output || "");
+  if (
+    launchctlTopLevelValue(output, "active count") !== "0"
+    || launchctlTopLevelValue(output, "state") !== "not running"
+    || launchctlTopLevelValue(output, "job state") !== "exited"
+    || launchctlTopLevelValue(output, "last exit code") !== "0"
+  ) {
+    return false;
+  }
+  const runs = Number(launchctlTopLevelValue(output, "runs"));
+  if (!Number.isSafeInteger(runs) || runs < 1) return false;
+
+  const program = launchctlTopLevelValue(output, "program");
+  if (!productionAppPaths.some(
+    (appPath) => shipItProgramBelongsToApp(program, appPath),
+  )) {
+    return false;
+  }
+
+  const updateRoot = path.join(homeDir, "Library", "Caches", label);
+  const stateFile = path.join(updateRoot, "ShipItState.plist");
+  if (!output.split("\n").some((line) => line.trim() === stateFile)) {
+    return false;
+  }
+  try {
+    const stateStat = lstat(stateFile);
+    if (!stateStat.isFile() || stateStat.isSymbolicLink()) return false;
+  } catch {
+    return false;
+  }
+
+  let request;
+  try {
+    request = JSON.parse(readFile(stateFile, "utf8"));
+  } catch {
+    return false;
+  }
+  const targetAppPath = localFilePathFromUrl(request?.targetBundleURL);
+  if (!productionAppPaths.some(
+    (appPath) => path.resolve(appPath) === path.resolve(targetAppPath || ""),
+  )) {
+    return false;
+  }
+  const stagedAppPath = localFilePathFromUrl(request?.updateBundleURL);
+  const stagedDirectory = path.dirname(stagedAppPath || "");
+  if (
+    path.extname(stagedAppPath).toLowerCase() !== ".app"
+    || path.dirname(stagedDirectory) !== path.resolve(updateRoot)
+    || !path.basename(stagedDirectory).startsWith("update.")
+    || exists(stagedDirectory)
+  ) {
+    return false;
+  }
+  return true;
+}
+
+export function isUnchangedPreexistingShipItJob({
+  currentJob,
+  preexistingJob,
+} = {}) {
+  return Boolean(
+    currentJob?.exists
+    && preexistingJob?.output
+    && currentJob.output === preexistingJob.output,
+  );
+}
+
 function hostPaths({ homeDir = homedir() } = {}) {
   return {
     productionAppPaths: [
@@ -198,8 +301,11 @@ function hostPaths({ homeDir = homedir() } = {}) {
   };
 }
 
-export function assertCurrentHostSafe() {
-  const paths = hostPaths();
+export function assertCurrentHostSafe({
+  allowedDormantUserShipItLabels = [],
+} = {}) {
+  const homeDir = homedir();
+  const paths = hostPaths({ homeDir });
   const processes = spawnSync("ps", ["-axo", "command="], {
     encoding: "utf8",
   });
@@ -207,15 +313,32 @@ export function assertCurrentHostSafe() {
     path.join(appPath, "Contents", "MacOS", "OpenGlance"),
     path.join(appPath, "Contents", "MacOS", "Git Leaf"),
   ]);
+  const allowedDormantLabels = new Set(allowedDormantUserShipItLabels);
+  const preexistingDormantUserShipItJobs = [];
+  const userShipItJobExists = OFFICIAL_SHIPIT_JOB_LABELS.some((label) => {
+    const details = launchctlJobDetails({ domain: "user", label });
+    if (!details.exists) return false;
+    if (
+      allowedDormantLabels.has(label)
+      && isCompletedDormantShipItJob({
+        details,
+        homeDir,
+        label,
+        productionAppPaths: paths.productionAppPaths,
+      })
+    ) {
+      preexistingDormantUserShipItJobs.push({ label, output: details.output });
+      return false;
+    }
+    return true;
+  });
   assertSafeMacUpdateRegressionHost({
     productionAppRunning: String(processes.stdout || "")
       .split("\n")
       .some((command) => productionExecutables.some(
         (executable) => command.trim().startsWith(executable),
       )),
-    userShipItJobExists: OFFICIAL_SHIPIT_JOB_LABELS.some((label) => (
-      launchctlJobExists({ domain: "user", label })
-    )),
+    userShipItJobExists,
     systemShipItJobExists: OFFICIAL_SHIPIT_JOB_LABELS.some((label) => (
       launchctlJobExists({ domain: "system", label })
     )),
@@ -229,6 +352,7 @@ export function assertCurrentHostSafe() {
       productionUserDataDir: paths.realShipItCacheRoot,
       entries: OFFICIAL_SHIPIT_JOB_LABELS,
     }),
+    preexistingDormantUserShipItJobs,
   };
 }
 
@@ -942,8 +1066,16 @@ async function runHarness({
   logPath,
   baseUrl = DEFAULT_BASE_URL,
 } = {}) {
-  const host = assertCurrentHostSafe();
   const channels = updateRegressionChannels(track);
+  const releaseShipItJobLabel = track === "internal"
+    ? SHIPIT_JOB_LABEL
+    : PUBLIC_SHIPIT_JOB_LABEL;
+  const host = assertCurrentHostSafe({
+    allowedDormantUserShipItLabels: [releaseShipItJobLabel],
+  });
+  const preexistingDormantUserShipItJobs = new Map(
+    host.preexistingDormantUserShipItJobs.map((job) => [job.label, job]),
+  );
   const temporaryRoot = mkdtempSync(
     path.join(tmpdir(), "git-leaf-mac-update-regression."),
   );
@@ -1292,15 +1424,37 @@ async function runHarness({
     }
     try {
       for (const label of OFFICIAL_SHIPIT_JOB_LABELS) {
+        const currentJob = launchctlJobDetails({ domain: "user", label });
+        const preexistingJob = preexistingDormantUserShipItJobs.get(label);
+        if (
+          !passedEvidence
+          && isUnchangedPreexistingShipItJob({ currentJob, preexistingJob })
+        ) {
+          continue;
+        }
         bootoutUserShipItJob(temporaryRoot, { label });
       }
     } catch (error) {
       cleanupErrors.push(error);
     }
     try {
-      if (OFFICIAL_SHIPIT_JOB_LABELS.some((label) => (
-        launchctlJobExists({ domain: "user", label })
-      ))) {
+      const remainingUserShipItJobs = OFFICIAL_SHIPIT_JOB_LABELS
+        .map((label) => ({
+          label,
+          details: launchctlJobDetails({ domain: "user", label }),
+        }))
+        .filter(({ details }) => details.exists);
+      const onlyPreservedAfterFailure = !passedEvidence
+        && remainingUserShipItJobs.every(({ label, details }) => (
+          isUnchangedPreexistingShipItJob({
+            currentJob: details,
+            preexistingJob: preexistingDormantUserShipItJobs.get(label),
+          })
+        ));
+      if (
+        remainingUserShipItJobs.length > 0
+        && !onlyPreservedAfterFailure
+      ) {
         throw new Error("The per-user ShipIt launchd job remained after cleanup");
       }
       if (OFFICIAL_SHIPIT_JOB_LABELS.some((label) => (
@@ -1375,8 +1529,9 @@ function printHelp() {
     [--base-url URL]
 
 This harness runs on the release Mac with an isolated HOME and Electron Profile.
-It refuses to start while an installed OpenGlance or Git Leaf App is running or a ShipIt
-launchd job already exists.`);
+It refuses to start while an installed OpenGlance or Git Leaf App is running or while
+ShipIt state is active, failed, pending, cross-track, or otherwise unsafe. A completed
+dormant same-track user job may be replaced by Squirrel's normal update submission.`);
 }
 
 async function main(args = process.argv.slice(2)) {

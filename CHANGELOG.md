@@ -4,6 +4,14 @@ OpenGlance follows Semantic Versioning for its shared app version. Git tags iden
 official public artifacts, signatures, checksums, and platform availability are authoritative only on
 the [OpenGlance download page](https://gitleaf.mangofuture.com/download).
 
+## 3.2.3 — 2026-09-12 (internal release)
+
+### Fixed
+
+- Allowed the macOS release regression to reuse a provably completed, dormant same-track ShipIt
+  registration through Squirrel's normal replacement path, while continuing to block active, failed,
+  pending, cross-track, or unclassifiable updater state and never unloading a production job manually.
+
 ## 3.2.2 — 2026-09-11 (internal release)
 
 ### Fixed

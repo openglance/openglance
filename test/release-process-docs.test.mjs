@@ -112,6 +112,9 @@ test("release documentation delegates UI acceptance and keeps update regression 
   assert.match(releaseDoc, /must run on the release Mac/);
   assert.match(releaseDoc, /npm run release:verify-update:mac/);
   assert.match(releaseDoc, /refuses to start while an installed OpenGlance or Git Leaf App is running/);
+  assert.match(releaseDoc, /completed dormant registration/);
+  assert.match(releaseDoc, /never manually unloads or boots out a production job/);
+  assert.match(releaseDoc, /cleanup preserves the original registration unchanged/);
   assert.match(releaseDoc, /real Profile and real ShipIt cache fingerprints did not change/);
   assert.match(releaseDoc, /verify-macos-update-regression[\s\S]*--evidence/);
   assert.doesNotMatch(releaseDoc, /mark-update-regression-verified\s*$/m);

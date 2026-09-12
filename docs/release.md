@@ -395,9 +395,15 @@ npm run release:verify-update:mac -- \
   --output dist/macos-update-regression/release-gate.json
 ```
 
-The harness refuses to start while an installed OpenGlance or Git Leaf App is running or any relevant ShipIt launchd job
-already exists. It uses a temporary App location whose parent is deliberately not writable, plus
-isolated HOME and Electron Profile paths when exercising the in-App updater. For a stable version older
+The harness refuses to start while an installed OpenGlance or Git Leaf App is running, while a system
+ShipIt job exists, or while a user ShipIt job is active, failed, still owns a staged update, or cannot be
+classified safely. A same-track user job is a completed dormant registration only when it has run at
+least once, exited successfully, is no longer active, belongs to the installed official App, and its
+recorded staged-update directory no longer exists. The harness may let Squirrel's normal submission
+replace that completed registration; it never manually unloads or boots out a production job. If the
+regression fails before Squirrel replaces it, cleanup preserves the original registration unchanged.
+The harness uses a temporary App location whose parent is deliberately not writable, plus isolated HOME
+and Electron Profile paths when exercising the in-App updater. For a stable version older
 than the first nonprivileged-only package, it uses the one-time `Contents` bridge instead of launching
 that legacy package's defective privileged Helper path. Its mandatory `finally` cleanup removes only
 state owned by that run. It then proves the real Profile and real ShipIt cache fingerprints did not change.

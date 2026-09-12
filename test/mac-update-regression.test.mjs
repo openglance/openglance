@@ -14,6 +14,8 @@ import {
   assertSafeMacUpdateRegressionHost,
   assertTemporaryProcessIsolation,
   downloadUpdateRegressionArtifact,
+  isCompletedDormantShipItJob,
+  isUnchangedPreexistingShipItJob,
   prepareIsolatedShipItRequestForInstallation,
   prepareInstalledBaselineAppPath,
   updateRegressionInstallExpression,
@@ -219,6 +221,134 @@ test("mac update regression refuses conflicting local updater state before launc
     userShipItJobExists: false,
     systemShipItJobExists: false,
   }));
+});
+
+test("mac update regression can adopt only a completed ShipIt job with no staged update", async (t) => {
+  const temporaryRoot = await mkdtemp(path.join(tmpdir(), "openglance-dormant-shipit."));
+  t.after(() => rm(temporaryRoot, { recursive: true, force: true }));
+  const label = "com.mangofuture.gitleaf.ShipIt";
+  const homeDir = path.join(temporaryRoot, "home");
+  const updateRoot = path.join(homeDir, "Library", "Caches", label);
+  const stagedDirectory = path.join(updateRoot, "update.STALE123");
+  const stagedApp = path.join(stagedDirectory, "OpenGlance.app");
+  const stateFile = path.join(updateRoot, "ShipItState.plist");
+  const targetApp = "/Applications/OpenGlance.app";
+  const program = path.join(
+    targetApp,
+    "Contents",
+    "Frameworks",
+    "Squirrel.framework",
+    "Resources",
+    "ShipIt",
+  );
+  await mkdir(updateRoot, { recursive: true });
+  await writeFile(stateFile, JSON.stringify({
+    launchAfterInstallation: true,
+    targetBundleURL: pathToFileURL(targetApp).href,
+    updateBundleURL: pathToFileURL(stagedApp).href,
+  }));
+  const output = [
+    `gui/502/${label} = {`,
+    "\tactive count = 0",
+    "\tstate = not running",
+    `\tprogram = ${program}`,
+    "\targuments = {",
+    `\t\t${program}`,
+    `\t\t${label}`,
+    `\t\t${stateFile}`,
+    "\t}",
+    "\truns = 1",
+    "\tlast exit code = 0",
+    "\tjob state = exited",
+    "}",
+  ].join("\n");
+  const details = { exists: true, output };
+
+  assert.equal(isCompletedDormantShipItJob({
+    details,
+    homeDir,
+    label,
+    productionAppPaths: [targetApp],
+  }), true);
+
+  await mkdir(stagedApp, { recursive: true });
+  assert.equal(isCompletedDormantShipItJob({
+    details,
+    homeDir,
+    label,
+    productionAppPaths: [targetApp],
+  }), false);
+  await rm(stagedDirectory, { recursive: true, force: true });
+
+  for (const unsafeOutput of [
+    output.replace("active count = 0", "active count = 1"),
+    output.replace("state = not running", "state = running"),
+    output.replace("runs = 1", "runs = 0"),
+    output.replace("last exit code = 0", "last exit code = 1"),
+    output.replace("job state = exited", "job state = waiting"),
+    output.replace(program, "/tmp/Other.app/Contents/Resources/ShipIt"),
+    output.replace(stateFile, `${stateFile}.other`),
+  ]) {
+    assert.equal(isCompletedDormantShipItJob({
+      details: { exists: true, output: unsafeOutput },
+      homeDir,
+      label,
+      productionAppPaths: [targetApp],
+    }), false);
+  }
+
+  await writeFile(stateFile, JSON.stringify({
+    launchAfterInstallation: true,
+    targetBundleURL: pathToFileURL("/Applications/Other.app").href,
+    updateBundleURL: pathToFileURL(stagedApp).href,
+  }));
+  assert.equal(isCompletedDormantShipItJob({
+    details,
+    homeDir,
+    label,
+    productionAppPaths: [targetApp],
+  }), false);
+
+  await writeFile(stateFile, JSON.stringify({
+    launchAfterInstallation: true,
+    targetBundleURL: pathToFileURL(targetApp).href,
+    updateBundleURL: pathToFileURL(
+      path.join(temporaryRoot, "outside", "update.STALE123", "OpenGlance.app"),
+    ).href,
+  }));
+  assert.equal(isCompletedDormantShipItJob({
+    details,
+    homeDir,
+    label,
+    productionAppPaths: [targetApp],
+  }), false);
+
+  await writeFile(stateFile, "not json");
+  assert.equal(isCompletedDormantShipItJob({
+    details,
+    homeDir,
+    label,
+    productionAppPaths: [targetApp],
+  }), false);
+});
+
+test("mac update regression preserves only the exact dormant job snapshot after failure", () => {
+  const preexistingJob = { label: "com.mangofuture.gitleaf.ShipIt", output: "snapshot\n" };
+  assert.equal(isUnchangedPreexistingShipItJob({
+    currentJob: { exists: true, output: "snapshot\n" },
+    preexistingJob,
+  }), true);
+  assert.equal(isUnchangedPreexistingShipItJob({
+    currentJob: { exists: true, output: "replacement\n" },
+    preexistingJob,
+  }), false);
+  assert.equal(isUnchangedPreexistingShipItJob({
+    currentJob: { exists: false, output: "snapshot\n" },
+    preexistingJob,
+  }), false);
+  assert.equal(isUnchangedPreexistingShipItJob({
+    currentJob: { exists: true, output: "snapshot\n" },
+  }), false);
 });
 
 test("mac product rename migration preserves repositories, workspace state, and preferences", () => {
