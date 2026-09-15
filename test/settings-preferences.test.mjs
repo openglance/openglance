@@ -6,6 +6,7 @@ import {
   GIT_REMOTE_CHECK_INTERVAL_MINUTES,
   LEGACY_USER_PREFERENCES,
   effectiveColorScheme,
+  normalizeDocumentMargins,
   normalizeDocumentFontSize,
   normalizeGitRemoteCheckIntervalMinutes,
   normalizeLanguagePreference,
@@ -77,6 +78,16 @@ test("document font size accepts only whole pixels from 14 through 22", () => {
   assert.equal(normalizeDocumentFontSize(22.5), 16);
 });
 
+test("document margins keep the current layout by default and accept only two modes", () => {
+  assert.equal(DEFAULT_USER_PREFERENCES.documentMargins, "standard");
+  assert.equal(LEGACY_USER_PREFERENCES.documentMargins, "standard");
+  assert.equal(normalizeDocumentMargins("standard"), "standard");
+  assert.equal(normalizeDocumentMargins(" WIDE "), "wide");
+  assert.equal(normalizeDocumentMargins("feishu"), "wide");
+  assert.equal(normalizeDocumentMargins("extra-wide"), "standard");
+  assert.equal(normalizeDocumentMargins("extra-wide", "feishu"), "wide");
+});
+
 test("Git remote checks accept only the seven persisted interval choices", () => {
   assert.deepEqual(GIT_REMOTE_CHECK_INTERVAL_MINUTES, [1, 2, 5, 10, 30, 60, 120]);
   for (const interval of GIT_REMOTE_CHECK_INTERVAL_MINUTES) {
@@ -95,6 +106,9 @@ test("preference patches whitelist only the public settings", () => {
     showDocumentTitles: false,
   });
   assert.deepEqual(preferencePatch("documentFontSize", "18"), { documentFontSize: 18 });
+  assert.deepEqual(preferencePatch("documentMargins", "wide"), {
+    documentMargins: "wide",
+  });
   assert.deepEqual(preferencePatch("gitRemoteCheckIntervalMinutes", "60"), {
     gitRemoteCheckIntervalMinutes: 60,
   });

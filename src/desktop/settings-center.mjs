@@ -32,6 +32,7 @@ const USER_PREFERENCE_KEYS = new Set([
   "colorMode",
   "documentFont",
   "documentFontSize",
+  "documentMargins",
   "fileTreeMode",
   "showDocumentTitles",
   "gitRemoteCheckIntervalMinutes",

@@ -159,6 +159,7 @@ import {
   isKeyboardShortcutsHelpShortcut,
 } from "../../public/keyboard-shortcuts.js";
 import { isToggleFavoriteShortcut } from "../../public/sidebar-favorites.js";
+import { normalizeDocumentMargins } from "../../public/settings-preferences.js";
 import { sidebarTabFromShortcut } from "../../public/sidebar-navigation.js";
 
 applyStableUserDataPath({ app });
@@ -535,6 +536,9 @@ async function recordTelemetryUpdateState(update) {
 
 async function saveDesktopPreferenceValues(preferences, { notifyRenderer = true } = {}) {
   const previousLanguage = currentDesktopTranslator().locale;
+  const previousDocumentMargins = normalizeDocumentMargins(
+    desktopRepositoryState.preferences?.documentMargins,
+  );
   const saved = await saveAndSyncDesktopPreferences({
     preferences,
     persistPreferences: (nextPreferences) => saveDesktopPreferences({
@@ -553,6 +557,9 @@ async function saveDesktopPreferenceValues(preferences, { notifyRenderer = true 
   });
   desktopRepositoryState = saved.state;
   const nextLanguage = currentDesktopTranslator().locale;
+  const documentMarginsChanged = previousDocumentMargins !== normalizeDocumentMargins(
+    desktopRepositoryState.preferences?.documentMargins,
+  );
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.setBackgroundColor(desktopPageBackgroundColor(
       desktopRepositoryState.preferences ?? {},
@@ -576,6 +583,8 @@ async function saveDesktopPreferenceValues(preferences, { notifyRenderer = true 
     if (!activeServer && !isRepositoryTransitioning) {
       await reloadDesktopHomeForLanguage();
     }
+  } else if (documentMarginsChanged) {
+    installMenu();
   }
   return saved.preferences;
 }
@@ -2133,6 +2142,9 @@ function installMenu() {
   const translate = currentDesktopTranslator();
   const isMac = process.platform === "darwin";
   const hasActiveRepository = Boolean(activeServer) && !isRepositoryTransitioning;
+  const documentMargins = normalizeDocumentMargins(
+    desktopRepositoryState.preferences?.documentMargins,
+  );
   const template = [
     ...(isMac
       ? [{
@@ -2268,6 +2280,27 @@ function installMenu() {
           enabled: hasActiveRepository,
         }),
         { type: "separator" },
+        {
+          label: translate("menu.pageMargins"),
+          submenu: [
+            {
+              type: "radio",
+              label: translate("menu.pageMarginsStandard"),
+              checked: documentMargins === "standard",
+              click: () => {
+                void saveDesktopPreferenceValues({ documentMargins: "standard" });
+              },
+            },
+            {
+              type: "radio",
+              label: translate("menu.pageMarginsWide"),
+              checked: documentMargins === "wide",
+              click: () => {
+                void saveDesktopPreferenceValues({ documentMargins: "wide" });
+              },
+            },
+          ],
+        },
         {
           label: translate("menu.tabs"),
           submenu: [

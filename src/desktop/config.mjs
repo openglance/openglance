@@ -506,6 +506,7 @@ function normalizeDesktopPreferences(value, { newInstall = false } = {}) {
     "colorMode",
     "documentFont",
     "documentFontSize",
+    "documentMargins",
     "fileTreeMode",
     "showDocumentTitles",
     "gitRemoteCheckIntervalMinutes",
