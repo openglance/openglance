@@ -10,6 +10,8 @@ import {
   pastedTextLinkCandidate,
   closestElement,
   liveClassForLine,
+  liveHeadingAnchorAdjustment,
+  markdownHeadingFoldSections,
   livePreviewBlocksForSource,
   livePreviewHtmlForBlock,
   liveBlockPreviewIgnoresEvent,
@@ -33,6 +35,84 @@ import {
   slashCommandsForLocale,
   slashCommandTemplate,
 } from "../src/client/source-editor.mjs";
+
+test("Markdown heading folds stop before the next heading at the same or higher level", () => {
+  assert.deepEqual(
+    markdownHeadingFoldSections([
+      "# Report",
+      "intro",
+      "## Findings",
+      "finding body",
+      "### Detail",
+      "detail body",
+      "## Summary",
+      "summary body",
+      "# Appendix",
+      "appendix body",
+    ].join("\n")),
+    [
+      { lineNumber: 1, level: 1, endLine: 8 },
+      { lineNumber: 3, level: 2, endLine: 6 },
+      { lineNumber: 5, level: 3, endLine: 6 },
+      { lineNumber: 7, level: 2, endLine: 8 },
+      { lineNumber: 9, level: 1, endLine: 10 },
+    ],
+  );
+});
+
+test("Markdown heading folds ignore frontmatter, fenced code, and empty sections", () => {
+  assert.deepEqual(
+    markdownHeadingFoldSections([
+      "---",
+      "title: '# Metadata'",
+      "---",
+      "# Visible",
+      "```md",
+      "## Not a heading",
+      "```",
+      "body",
+      "## Empty",
+      "",
+      "## Final",
+      "final body",
+    ].join("\n")),
+    [
+      { lineNumber: 4, level: 1, endLine: 12 },
+      { lineNumber: 11, level: 2, endLine: 12 },
+    ],
+  );
+});
+
+test("Live heading anchor adjustment preserves the title and only keeps needed bottom space", () => {
+  assert.deepEqual(
+    liveHeadingAnchorAdjustment({
+      beforeTop: 440,
+      afterTop: 440,
+      scrollTop: 316,
+      scrollHeight: 1_810,
+      clientHeight: 822,
+      currentPadding: 854,
+    }),
+    {
+      targetScrollTop: 316,
+      requiredPadding: 184,
+    },
+  );
+  assert.deepEqual(
+    liveHeadingAnchorAdjustment({
+      beforeTop: 440,
+      afterTop: -1_010,
+      scrollTop: 1_766,
+      scrollHeight: 3_443,
+      clientHeight: 822,
+      currentPadding: 854,
+    }),
+    {
+      targetScrollTop: 316,
+      requiredPadding: 0,
+    },
+  );
+});
 
 test("minimalDocumentChange preserves unchanged editor ranges around a remote update", () => {
   const current = "local first\nmiddle\nlast\n";
