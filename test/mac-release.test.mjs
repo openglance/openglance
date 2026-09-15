@@ -310,13 +310,32 @@ test("mac release signing targets include Electron nested binaries notarization 
   ]);
 });
 
-test("mac release verification checks every Mach-O for both supported architectures", () => {
-  const [command, args] = universalMachOVerificationCommand("/repo/dist/OpenGlance.app");
-
-  assert.equal(command, "bash");
-  assert.match(args[1], /find "\$1" -type f -print0/);
-  assert.match(args[1], /lipo "\$target" -verify_arch arm64 x86_64/);
-  assert.equal(args.at(-1), "/repo/dist/OpenGlance.app");
+test("mac release verification accepts universal Mach-O and rejects either missing architecture", {
+  skip: process.platform !== "darwin",
+}, async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), "openglance-arch-verification-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const app = path.join(root, "Example App.app");
+  await mkdir(path.join(app, "nested"), { recursive: true });
+  await writeFile(path.join(app, "readme.txt"), "Not a Mach-O file\n");
+  const source = path.join(root, "probe.c");
+  await writeFile(source, "int probe(void) { return 0; }\n");
+  const run = (command, args) => {
+    const result = spawnSync(command, args, { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr);
+  };
+  for (const arch of ["arm64", "x86_64"]) {
+    run("xcrun", ["clang", "-arch", arch, "-c", source, "-o", path.join(root, `${arch}.o`)]);
+  }
+  const target = path.join(app, "nested", "probe binary");
+  run("lipo", ["-create", path.join(root, "arm64.o"), path.join(root, "x86_64.o"), "-output", target]);
+  const [command, args] = universalMachOVerificationCommand(app);
+  run(command, args);
+  for (const arch of ["arm64", "x86_64"]) {
+    await writeFile(target, await readFile(path.join(root, `${arch}.o`)));
+    assert.notEqual(spawnSync(command, args, { encoding: "utf8" }).status, 0,
+      `A ${arch}-only binary must fail the universal package gate`);
+  }
 });
 
 test("mac release paths use friendly versioned artifact filenames", () => {

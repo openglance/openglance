@@ -1737,7 +1737,8 @@ export function universalMachOVerificationCommand(appDir) {
     `set -euo pipefail
 while IFS= read -r -d '' target; do
   if file -b "$target" | grep -q 'Mach-O'; then
-    lipo "$target" -verify_arch arm64 x86_64
+    lipo "$target" -verify_arch arm64
+    lipo "$target" -verify_arch x86_64
   fi
 done < <(find "$1" -type f -print0)`,
     "verify-git-leaf-universal",

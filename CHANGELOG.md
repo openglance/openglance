@@ -10,6 +10,8 @@ the [OpenGlance download page](https://gitleaf.mangofuture.com/download).
 
 - Restored desktop usage analytics initialization after launch-protocol classification, allowing
   eligible internal installations to resume durable daily activity summaries and periodic uploads.
+- Kept universal macOS package verification compatible with toolchains that require one architecture
+  per `lipo -verify_arch` invocation, while still rejecting either missing architecture.
 
 ## 3.2.4 — 2026-09-13 (internal release)
 
