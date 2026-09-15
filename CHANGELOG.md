@@ -4,6 +4,13 @@ OpenGlance follows Semantic Versioning for its shared app version. Git tags iden
 official public artifacts, signatures, checksums, and platform availability are authoritative only on
 the [OpenGlance download page](https://gitleaf.mangofuture.com/download).
 
+## 3.2.5 — 2026-09-15 (internal release)
+
+### Fixed
+
+- Restored desktop usage analytics initialization after launch-protocol classification, allowing
+  eligible internal installations to resume durable daily activity summaries and periodic uploads.
+
 ## 3.2.4 — 2026-09-13 (internal release)
 
 ### Changed
