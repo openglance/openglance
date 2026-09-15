@@ -18,6 +18,7 @@ import path from "node:path";
 import process from "node:process";
 
 import { openGlanceEnvironmentValue } from "../environment.mjs";
+import { OPENGLANCE_SUPPORTED_PROTOCOLS } from "../product-identity.mjs";
 import { createDesktopUpdateController } from "./updates.mjs";
 import { startMacAppNameMigration } from "./mac-app-name-migration.mjs";
 import { configureMacUpdateInstallation } from "./mac-update-installation.mjs";
