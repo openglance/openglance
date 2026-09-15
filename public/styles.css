@@ -37,6 +37,9 @@
   --document-blockquote-content-padding: 16px;
   --document-blockquote-inset: calc(var(--document-blockquote-border-width) + var(--document-blockquote-content-padding));
   --document-list-marker-gap: 0.36em;
+  --document-list-level-indent: 1.5em;
+  --document-list-nested-marker-offset: 0.28em;
+  --document-list-source-space-width: 0.262em;
   --document-list-unordered-marker-font-size: 0.72em;
   --document-list-ordered-marker-font-size: 0.96em;
   --bg: #f6f7f9;
@@ -3921,6 +3924,13 @@ summary.has-operation-feedback .tree-directory-parent {
   padding-left: 1.35em;
 }
 
+.document-content ul ul,
+.document-content ul ol,
+.document-content ol ul,
+.document-content ol ol {
+  padding-left: var(--document-list-level-indent);
+}
+
 .document-content li {
   padding-left: var(--document-list-marker-gap);
 }
@@ -3936,6 +3946,54 @@ summary.has-operation-feedback .tree-directory-parent {
 
 .document-content ol li::marker {
   font-size: var(--document-list-ordered-marker-font-size);
+}
+
+.document-content ul {
+  list-style-type: disc;
+}
+
+.document-content ol {
+  list-style-type: decimal;
+}
+
+.document-content :is(ul, ol) > li > ul {
+  list-style-type: circle;
+}
+
+.document-content :is(ul, ol) > li > ol {
+  list-style-type: lower-alpha;
+}
+
+.document-content :is(ul, ol) > li > :is(ul, ol) > li > ul {
+  list-style-type: square;
+}
+
+.document-content :is(ul, ol) > li > :is(ul, ol) > li > ol {
+  list-style-type: lower-roman;
+}
+
+.document-content :is(ul, ol) > li > :is(ul, ol) > li > :is(ul, ol) > li > ul {
+  list-style-type: disc;
+}
+
+.document-content :is(ul, ol) > li > :is(ul, ol) > li > :is(ul, ol) > li > ol {
+  list-style-type: decimal;
+}
+
+.document-content :is(ul, ol) > li > :is(ul, ol) > li > :is(ul, ol) > li > :is(ul, ol) > li > ul {
+  list-style-type: circle;
+}
+
+.document-content :is(ul, ol) > li > :is(ul, ol) > li > :is(ul, ol) > li > :is(ul, ol) > li > ol {
+  list-style-type: lower-alpha;
+}
+
+.document-content :is(ul, ol) > li > :is(ul, ol) > li > :is(ul, ol) > li > :is(ul, ol) > li > :is(ul, ol) > li > ul {
+  list-style-type: square;
+}
+
+.document-content :is(ul, ol) > li > :is(ul, ol) > li > :is(ul, ol) > li > :is(ul, ol) > li > :is(ul, ol) > li > ol {
+  list-style-type: lower-roman;
 }
 
 .document-content code {

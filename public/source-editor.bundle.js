@@ -38817,10 +38817,20 @@ function liveMarkdownThemeForTheme(theme2) {
     },
     ".cm-live-code": {
       color: "var(--text)",
-      border: "1px solid var(--panel-border)",
-      borderRadius: "8px",
+      border: "0",
+      borderRadius: "0",
       backgroundColor: "var(--code-bg)",
-      fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace"
+      fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace",
+      fontSize: "0.9em",
+      lineHeight: "1.55"
+    },
+    ".cm-live-code-block-start": {
+      borderRadius: "8px 8px 0 0",
+      paddingTop: "4px"
+    },
+    ".cm-live-code-block-end": {
+      borderRadius: "0 0 8px 8px",
+      paddingBottom: "4px"
     },
     ".cm-live-marker": {
       color: "var(--text-secondary)",
@@ -38836,6 +38846,9 @@ function liveMarkdownThemeForTheme(theme2) {
     ".cm-live-replacement-widget": {
       color: "var(--text)"
     },
+    ".cm-live-list": {
+      paddingLeft: "var(--live-list-indent-extra, 0px)"
+    },
     ".cm-live-list-widget": {
       display: "inline-flex",
       alignItems: "center",
@@ -38847,6 +38860,9 @@ function liveMarkdownThemeForTheme(theme2) {
       lineHeight: "inherit",
       marginRight: "var(--document-list-marker-gap)"
     },
+    ".cm-live-list[data-live-list-depth] .cm-live-list-widget": {
+      transform: "translateX(calc(-1 * var(--document-list-nested-marker-offset)))"
+    },
     ".cm-live-list-widget.is-unordered": {
       fontSize: "var(--document-font-size)"
     },
@@ -38857,6 +38873,13 @@ function liveMarkdownThemeForTheme(theme2) {
       fontSize: "var(--document-list-unordered-marker-font-size)",
       lineHeight: "1",
       textAlign: "center"
+    },
+    '.cm-live-list[data-live-list-depth="1"] .cm-live-list-widget.is-unordered::before, .cm-live-list[data-live-list-depth="4"] .cm-live-list-widget.is-unordered::before': {
+      content: '"\u25E6"',
+      fontSize: "0.9em"
+    },
+    '.cm-live-list[data-live-list-depth="2"] .cm-live-list-widget.is-unordered::before, .cm-live-list[data-live-list-depth="5"] .cm-live-list-widget.is-unordered::before': {
+      content: '"\u25AA"'
     },
     ".cm-live-strong": {
       color: "var(--text-strong)",
@@ -41536,9 +41559,11 @@ function buildLiveMarkdownDecorations(state, { suppressActiveLine = false } = {}
   let inCodeBlock = false;
   let mdxComponentName = null;
   const activeLineNumber = suppressActiveLine ? null : state.doc.lineAt(state.selection.main.head).number;
-  const previewBlocks = livePreviewBlocksForSource(state.doc.toString(), {
+  const source = state.doc.toString();
+  const previewBlocks = livePreviewBlocksForSource(source, {
     activeLineNumber
   });
+  const listIndentation = liveListIndentationForLines(source.split("\n"));
   let previewBlockIndex = 0;
   for (let lineNumber = 1; lineNumber <= state.doc.lines; lineNumber += 1) {
     const previewBlock = previewBlocks[previewBlockIndex];
@@ -41572,13 +41597,17 @@ function buildLiveMarkdownDecorations(state, { suppressActiveLine = false } = {}
       inCodeBlock,
       inMdxComponent
     });
+    const listLineAttributes = className === "cm-live-list" ? liveListLineAttributes(listIndentation[lineNumber - 1]) : {};
     if (className) {
       builder.add(
         line.from,
         line.from,
         Decoration.line({
           class: className,
-          attributes: mdxComponent ? { "data-live-component": `${mdxComponent.name} \xB7 ${mdxComponent.title}` } : {}
+          attributes: {
+            ...mdxComponent ? { "data-live-component": `${mdxComponent.name} \xB7 ${mdxComponent.title}` } : {},
+            ...listLineAttributes
+          }
         })
       );
     }
@@ -41595,7 +41624,8 @@ function buildLiveMarkdownDecorations(state, { suppressActiveLine = false } = {}
       }
     } else if (!inCodeBlock) {
       for (const range of liveVisualRangesForLine(line.text, {
-        isActiveLine: lineNumber === activeLineNumber
+        isActiveLine: lineNumber === activeLineNumber,
+        listDepth: listIndentation[lineNumber - 1]?.depth ?? 0
       })) {
         if (range.type === "replace") {
           const widget = range.className === "cm-live-list-widget" && Number.isInteger(range.indentColumns) && Number.isInteger(range.markerColumns) ? new LiveListMarkerWidget(
@@ -41741,7 +41771,7 @@ function liveClassForLine({
     return "cm-live-mdx-component";
   }
   if (/^(?:`{3,}|~{3,})/.test(trimmed)) {
-    return "cm-live-code cm-live-code-fence";
+    return inCodeBlock ? "cm-live-code cm-live-code-fence cm-live-code-block-end" : "cm-live-code cm-live-code-fence cm-live-code-block-start";
   }
   if (inCodeBlock) {
     return "cm-live-code";
@@ -41761,6 +41791,50 @@ function liveClassForLine({
     return "cm-live-list";
   }
   return "";
+}
+function liveListIndentationForLines(lines) {
+  const indentStack = [];
+  return Array.from(lines ?? [], (line) => {
+    const text2 = String(line ?? "");
+    const list2 = /^([ \t]*)(?:[-*+]|\d+\.)[ \t]+/.exec(text2);
+    if (!list2) {
+      if (text2.trim() && leadingWhitespaceColumns(text2) === 0) {
+        indentStack.length = 0;
+      }
+      return null;
+    }
+    const sourceColumns = whitespaceColumns(list2[1]);
+    while (indentStack.length > 0 && sourceColumns < indentStack.at(-1)) {
+      indentStack.pop();
+    }
+    if (indentStack.length === 0 || sourceColumns > indentStack.at(-1)) {
+      indentStack.push(sourceColumns);
+    }
+    return {
+      depth: Math.max(0, indentStack.length - 1),
+      sourceColumns
+    };
+  });
+}
+function liveListLineAttributes(indentation) {
+  if (!indentation || indentation.depth < 1) {
+    return {};
+  }
+  const { depth, sourceColumns } = indentation;
+  return {
+    "data-live-list-depth": String(depth),
+    style: `--live-list-indent-extra: max(0px, calc(${depth} * var(--document-list-level-indent) - ${sourceColumns} * var(--document-list-source-space-width)));`
+  };
+}
+function leadingWhitespaceColumns(text2) {
+  return whitespaceColumns(/^[ \t]*/.exec(String(text2 ?? ""))?.[0] ?? "");
+}
+function whitespaceColumns(whitespace) {
+  let columns = 0;
+  for (const character of String(whitespace ?? "")) {
+    columns += character === "	" ? 4 - columns % 4 : 1;
+  }
+  return columns;
 }
 function liveInlineRangesForLine(text2) {
   const ranges = [];
@@ -42067,14 +42141,17 @@ function removeSourceBlockChrome(html2) {
   );
   return withoutGutters.replace(/^<div class="source-block"[^>]*>\s*<div class="source-block-content">/, "").replace(/<\/div>\s*<\/div>\s*$/, "");
 }
-function liveVisualRangesForLine(text2, { isActiveLine = false } = {}) {
+function liveVisualRangesForLine(text2, {
+  isActiveLine = false,
+  listDepth = 0
+} = {}) {
   if (isActiveLine) {
     return liveInlineRangesForLine(text2).map((range) => ({
       type: "mark",
       ...range
     }));
   }
-  const readableReplacements = liveReadableReplacementsForLine(text2).map((range) => ({
+  const readableReplacements = liveReadableReplacementsForLine(text2, { listDepth }).map((range) => ({
     type: "replace",
     ...range
   }));
@@ -42092,7 +42169,7 @@ function liveVisualRangesForLine(text2, { isActiveLine = false } = {}) {
 function rangesOverlap(left, right) {
   return left.from < right.to && right.from < left.to;
 }
-function liveReadableReplacementsForLine(text2) {
+function liveReadableReplacementsForLine(text2, { listDepth = 0 } = {}) {
   const ranges = [];
   const push = (from, to, widget = "", className = "", extra = {}) => {
     if (Number.isInteger(from) && Number.isInteger(to) && to > from) {
@@ -42118,7 +42195,7 @@ function liveReadableReplacementsForLine(text2) {
     const markerStart = list2[1].length;
     const markerEnd = markerStart + list2[2].length + list2[3].length;
     const markerColumns = list2[2].length + list2[3].length;
-    const widget = /^\d+\.$/.test(list2[2]) ? list2[2] : "\u2022";
+    const widget = liveListMarkerForDepth(list2[2], listDepth);
     push(markerStart, markerEnd, widget, "cm-live-list-widget", {
       indentColumns: 0,
       markerColumns
@@ -42129,6 +42206,63 @@ function liveReadableReplacementsForLine(text2) {
     }
   }
   return ranges.sort((left, right) => left.from - right.from || left.to - right.to);
+}
+function liveListMarkerForDepth(sourceMarker, depth = 0) {
+  const marker = String(sourceMarker ?? "");
+  if (/^[-*+]$/.test(marker)) {
+    return "\u2022";
+  }
+  if (!/^\d+\.$/.test(marker)) {
+    return marker;
+  }
+  const value = Number.parseInt(marker, 10);
+  const markerStyle = Math.max(0, Math.trunc(Number(depth) || 0)) % 3;
+  if (!Number.isSafeInteger(value) || value < 1 || markerStyle === 0) {
+    return marker;
+  }
+  if (markerStyle === 1) {
+    return `${alphabeticListMarker(value)}.`;
+  }
+  return `${romanListMarker(value)}.`;
+}
+function alphabeticListMarker(value) {
+  let remaining = value;
+  let marker = "";
+  while (remaining > 0) {
+    remaining -= 1;
+    marker = String.fromCharCode(97 + remaining % 26) + marker;
+    remaining = Math.floor(remaining / 26);
+  }
+  return marker;
+}
+function romanListMarker(value) {
+  if (value > 3999) {
+    return String(value);
+  }
+  const numerals = [
+    [1e3, "m"],
+    [900, "cm"],
+    [500, "d"],
+    [400, "cd"],
+    [100, "c"],
+    [90, "xc"],
+    [50, "l"],
+    [40, "xl"],
+    [10, "x"],
+    [9, "ix"],
+    [5, "v"],
+    [4, "iv"],
+    [1, "i"]
+  ];
+  let remaining = value;
+  let marker = "";
+  for (const [number2, numeral] of numerals) {
+    while (remaining >= number2) {
+      marker += numeral;
+      remaining -= number2;
+    }
+  }
+  return marker;
 }
 function liveReadableInlineReplacementsForLine(text2) {
   return liveInlineRangesForLine(text2).filter((range) => hasCssClass(range.className, "cm-live-marker")).map((range) => ({
@@ -42261,6 +42395,8 @@ export {
   liveFrontmatterFieldForLine,
   liveFrontmatterRangesForLine,
   liveInlineRangesForLine,
+  liveListIndentationForLines,
+  liveListMarkerForDepth,
   liveMarkdownLinkAtPosition,
   liveMarkdownLinksForLine,
   liveMdxComponentForLine,
