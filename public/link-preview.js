@@ -4,9 +4,8 @@ import { createTranslator } from "./i18n.js";
 const MESSAGES = {
   en: {
     preview: "Link preview", loading: "Loading preview…", open: "Open", expand: "Read more", collapse: "Show less", close: "Close preview",
-    empty: "No excerpt available.", document: "Local document", github: "GitHub · via gh", summary: "Summary", section: "Section", lines: "Source lines", excerpt: "Excerpt",
-    repository: "Repository", issue: "Issue", pull: "Pull request", file: "File", commit: "Commit", release: "Release",
-    milestone: "Milestone", milestoneOpen: "Open", milestoneClosed: "Closed", milestoneDue: "Due {date}", milestoneNoDue: "No due date",
+    empty: "No excerpt available.",
+    milestoneOpen: "Open", milestoneClosed: "Closed", milestoneDue: "Due {date}", milestoneNoDue: "No due date",
     milestoneProgress: "Closed {closed}/{total} ({percent}%) · {open} open", milestoneEmpty: "No issues or pull requests",
     unavailable: "Not found or your current account does not have access.", location_missing: "This section or line range was not found.",
     repository_unavailable: "Preview is available for the current repository only. Open this link to switch repositories.",
@@ -15,14 +14,13 @@ const MESSAGES = {
     network_error: "Could not load the preview. Check your connection and try again.", busy: "Other previews are still loading. Hover again shortly.",
     unsupported: "This link cannot be previewed.", too_large: "This file is too large or cannot be previewed as text.",
     local_copy: "Local copy · the shared revision has not been verified.", resource_excerpt: "Showing the issue or pull request body; the linked comment or diff is not included.",
-    saved_copy: "Saved file · unsaved editor changes are not included.", keyboard: "Alt + ↓ to enter preview · Esc to close",
+    saved_copy: "Saved file · unsaved editor changes are not included.",
     file_excerpt: "Showing a file excerpt; this GitHub anchor is not resolved in the preview.",
   },
   "zh-CN": {
     preview: "链接预览", loading: "正在加载预览……", open: "打开", expand: "展开原文", collapse: "收起", close: "关闭预览",
-    empty: "暂无可预览的正文。", document: "本地文档", github: "GitHub · 通过 gh", summary: "摘要", section: "章节", lines: "源文件行号", excerpt: "原文摘录",
-    repository: "仓库", issue: "Issue", pull: "Pull Request", file: "文件", commit: "提交", release: "Release",
-    milestone: "里程碑", milestoneOpen: "进行中", milestoneClosed: "已关闭", milestoneDue: "截止 {date}", milestoneNoDue: "未设置截止日期",
+    empty: "暂无可预览的正文。",
+    milestoneOpen: "进行中", milestoneClosed: "已关闭", milestoneDue: "截止 {date}", milestoneNoDue: "未设置截止日期",
     milestoneProgress: "已关闭 {closed}/{total}（{percent}%） · {open} 未关闭", milestoneEmpty: "暂无 Issue 或 PR",
     unavailable: "内容不存在，或当前账号没有访问权限。", location_missing: "未找到链接指向的章节或行号。",
     repository_unavailable: "目前仅预览当前仓库的文档；打开链接可切换仓库。",
@@ -31,7 +29,7 @@ const MESSAGES = {
     network_error: "预览加载失败，请检查网络后重试。", busy: "其他预览仍在加载，请稍后重新悬停。",
     unsupported: "此链接暂不支持预览。", too_large: "文件过大，或无法作为文本预览。",
     local_copy: "本地副本 · 尚未校验分享链接的版本。", resource_excerpt: "当前显示 Issue 或 PR 正文，不包含链接指向的评论或差异。",
-    saved_copy: "已保存文件 · 不包含编辑器中尚未保存的修改。", keyboard: "Alt + ↓ 进入预览 · Esc 关闭",
+    saved_copy: "已保存文件 · 不包含编辑器中尚未保存的修改。",
     file_excerpt: "当前显示文件摘录，尚未定位到此 GitHub 锚点。",
   },
 };
@@ -94,13 +92,12 @@ export function attachLinkPreviews({ containers, getContext, isBlocked = () => f
     card.setAttribute("aria-label", t("preview"));
     card.replaceChildren();
     const header = element("div", "link-preview-header");
-    const target = linkPreviewTarget(href, context());
-    header.append(element("span", "link-preview-source", `${t(target?.kind === "github" ? "github" : "document")}${payload?.source ? ` · ${t(payload.source)}` : ""}`));
+    if (payload?.title) header.append(element("div", "link-preview-title", payload.title));
     const close = element("button", "link-preview-close", "×");
     close.type = "button"; close.setAttribute("aria-label", t("close"));
+    close.title = `${t("close")} (Esc)`;
     close.onclick = () => { const previous = item; suppressed = previous; hide(); previous?.focus({ preventScroll: true }); };
     header.append(close); card.append(header);
-    if (payload?.title) card.append(element("div", "link-preview-title", payload.title));
     if (payload?.path) card.append(element("div", "link-preview-path", payload.path));
     const metadata = [payload?.location, ...(payload?.metadata || []), ...milestonePreviewMetadata(payload?.milestone, context().locale)].filter(Boolean).join(" · ");
     if (metadata) card.append(element("div", "link-preview-meta", metadata));
@@ -126,7 +123,6 @@ export function attachLinkPreviews({ containers, getContext, isBlocked = () => f
     open.href = href;
     open.onclick = (event) => { event.preventDefault(); const currentHref = href; const currentItem = item; hide(); onOpen(currentHref, currentItem, event); };
     footer.append(open); card.append(footer);
-    card.append(element("div", "link-preview-keyboard", t("keyboard")));
     card.hidden = false;
     item?.setAttribute("aria-details", card.id);
     position();

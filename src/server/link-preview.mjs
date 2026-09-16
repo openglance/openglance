@@ -153,7 +153,7 @@ async function githubPreview(target, api) {
   const preview = isMarkdown || lineHash
     ? markdownLinkPreview(source, { file, hash: lineHash })
     : { status: "ok", title: file.split("/").at(-1), excerpt: source.slice(0, 700), detail: source.slice(0, 10000), code: true };
-  return { ...common, ...preview, path: `${pathLabel}/${file}`, metadata: [ref.slice(0, 7)],
+  return { ...common, ...preview, path: `${pathLabel}/${file}`,
     ...(target.hash && !lineHash ? { notice: "file_excerpt" } : {}) };
 }
 

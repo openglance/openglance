@@ -128,7 +128,8 @@ or correction came from.
 ### Preview a link before opening it
 
 In Preview or Live, pause over a local Markdown/MDX link or a supported `github.com` link. A small card
-appears without navigating. Move into the card to keep it open, expand its excerpt, or choose **Open**.
+appears without navigating, with the title and close button on one row above the path and excerpt.
+Move into the card to keep it open, expand its excerpt, or choose **Open**.
 Press `Escape` to dismiss it. In Preview, focusing a link also shows its card; `Alt+Down` moves keyboard
 focus into the card. Clicking the original link keeps its existing navigation or Live editing behavior.
 

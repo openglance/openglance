@@ -155,6 +155,7 @@ try {
       assert.ok(calls.every((item) => item.protocol === (http2 ? "2.0" : "1.1")), `Unexpected API protocols: ${calls.map((item) => item.protocol).join(", ")}`);
       assert.equal(githubFixture.connectionCount(), connectionsBefore, "Different files must reuse the TLS connection after idle");
       console.log(`${mode}: uncached file ${file}=${Math.round(performance.now()-started)}ms; ${calls.length} API reads on the existing ${http2 ? "HTTP/2" : "HTTP/1.1"} connection.`);
+      if (file === "a") await screenshot(`link-preview-file-${mode}.png`);
       await dismiss();
     }
     if (http2) assert.ok(githubFixture.maxConcurrentRefs() >= 2, "Heads and tags must use concurrent streams on the same connection");

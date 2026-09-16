@@ -108,7 +108,8 @@ Tab。
 ### 打开链接前先预览
 
 在 Preview 或 Live 中，将鼠标停在本地 Markdown／MDX 链接或支持的 `github.com` 链接上，即可看到
-预览卡片。将鼠标移入卡片可以继续阅读、展开摘录或点击“打开”；按 `Escape` 关闭。Preview 中通过
+紧凑的预览卡片：标题与关闭按钮同排，下方展示路径和摘录。将鼠标移入卡片可以继续阅读、展开摘录或
+点击“打开”；按 `Escape` 关闭。Preview 中通过
 键盘聚焦链接也能打开卡片，`Alt+↓` 将焦点移入卡片。直接点击原链接仍保留原有导航或 Live 编辑行为。
 
 整篇文档优先展示已保存 Frontmatter 中的 `description`、`summary`、`ai_snippet`，没有摘要时显示
