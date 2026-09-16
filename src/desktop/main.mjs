@@ -82,7 +82,7 @@ import {
   DESKTOP_OPEN_REPOSITORY_URL,
   DESKTOP_OPEN_WORKTREE_URL,
 } from "./home.mjs";
-import { classifyDesktopNavigation } from "./navigation.mjs";
+import { classifyDesktopNavigation, openActiveWorkbenchDocument } from "./navigation.mjs";
 import {
   loadWebContentsUrl,
   waitForWebContentsPaint,
@@ -2049,6 +2049,18 @@ async function openKnownRepository(
   }
 
   try {
+    const resolvedRepoRoot = await realpath(await findRepoRoot(repoRoot));
+    const reused = isRepositoryTransitioning ? null : await openActiveWorkbenchDocument({
+      server: activeServer,
+      repoRoot: resolvedRepoRoot,
+      file: initialFilePath,
+      webContents: mainWindow?.webContents,
+    });
+    if (reused !== null) {
+      settingsCenter?.hide();
+      isRepositoryPanelOpen = false;
+      return reused;
+    }
     if (showProgress) {
       const currentRepoName = activeServer ? path.basename(activeServer.repoRoot) : "";
       await showProgressPage({
@@ -2068,7 +2080,6 @@ async function openKnownRepository(
       isRepositoryTransitioning = true;
       installMenu();
     }
-    const resolvedRepoRoot = await findRepoRoot(repoRoot);
     await openRepository(resolvedRepoRoot, initialFilePath, { showProgress: false });
     return true;
   } catch (error) {

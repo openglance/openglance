@@ -207,6 +207,12 @@ an explicit call site; for example, a failed share-title preview can fall back t
 
 ## Workbench state and navigation
 
+After repository identity and worktree resolution, ordinary desktop document links targeting the active
+worktree reuse its server and renderer. They flush pending editor writes, activate an existing document
+tab or open a new one, and acknowledge navigation only after it completes. A failed save or document
+read preserves the current workbench. A different worktree or a Home page still uses the full repository
+transition; matching the repository alone is not sufficient for reuse.
+
 The front end has four stable areas:
 
 - a top bar with repository identity, document tabs, modes, and document actions;

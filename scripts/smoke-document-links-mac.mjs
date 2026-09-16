@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
 import { spawn, execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -63,8 +63,8 @@ function isolatedAppProcess() {
   assert.ok(match, "The smoke App must use the explicit temporary Profile");
   return { pid: Number(match[1]), executable: match[2] };
 }
-async function openRequest(args) {
-  await delay(1200);
+async function openRequest(args, settleMs = 1200) {
+  await delay(settleMs);
   const request = spawn(isolatedAppProcess().executable, [
     `--openglance-dev-user-data-dir=${userData}`,
     ...args,
@@ -153,12 +153,67 @@ try {
     }
   }
   if (!expectBug) {
-    for (const mode of ["preview", "live"]) {
+    const reusedOrigin = await evaluate(`(() => {
+      window.linkSmokeResults = [];
+      window.addEventListener("git-leaf-desktop-open-document", (event) => {
+        Promise.resolve(event.detail.result).then(result => window.linkSmokeResults.push(result));
+      });
+      return performance.timeOrigin;
+    })()`);
+    async function openReused(filePath, expected = true) {
+      const count = await evaluate("window.linkSmokeResults.length");
+      const started = Date.now();
+      await openRequest([openGlanceDeepLinkUrl({ repository, file: filePath })], 0);
+      await until(() => evaluate(`window.linkSmokeResults?.length > ${count}`));
+      assert.equal(await evaluate("performance.timeOrigin"), reusedOrigin, "Same-worktree links must preserve the loaded page");
+      assert.equal(await evaluate("window.linkSmokeResults.at(-1)"), expected);
+      return Date.now() - started;
+    }
+    const timings = [];
+    for (const mode of ["preview", "live", "source"]) {
       await click(`#mode-${mode}`);
       await until(() => evaluate(`document.querySelector("#mode-${mode}").getAttribute("aria-pressed") === "true"`));
-      if (mode === "live") await until(() => evaluate('!!document.querySelector(".cm-content[contenteditable=true]")'));
+      if (mode !== "preview") await until(() => evaluate('!!document.querySelector(".cm-content[contenteditable=true]")'));
+      for (let cycle = 0; cycle < 3; cycle++) {
+        timings.push({ mode, ms: await openReused(cycle % 2 ? file : "README.md") });
+        assert.equal(await evaluate(`document.querySelector("#mode-${mode}").getAttribute("aria-pressed")`), "true");
+      }
+      await openReused(file);
+      if (mode !== "preview") {
+        const marker = `Saved ${mode} edit before link`;
+        await click(".cm-content[contenteditable=true]");
+        await cdp("Input.insertText", { text: `\n${marker}\n` });
+        await openReused("README.md");
+        assert.ok(readFileSync(path.join(fixture, file), "utf8").includes(marker));
+        await openReused(file);
+      }
       await screenshot(`ordinary-link-${mode}.png`);
     }
+    await openReused("docs/missing.md", false);
+    assert.equal(await evaluate('new URL(location.href).searchParams.get("file")'), file);
+    assert.match(await evaluate('document.querySelector("#copy-toast").textContent'), /ENOENT|not found|不存在|找不到/i);
+    await openReused("README.md");
+    assert.equal(await evaluate('document.querySelectorAll("[data-document-tab-id]").length'), 2);
+    await click("#mode-source");
+    await until(() => evaluate('!!document.querySelector(".cm-content[contenteditable=true]")'));
+    await evaluate(`(() => {
+      window.linkSmokeFetch = window.fetch;
+      window.fetch = (input, options) => options?.method === "POST" && String(input).includes("/api/document")
+        ? Promise.resolve(new Response('{"error":"simulated save failure"}', { status: 500 }))
+        : window.linkSmokeFetch(input, options);
+    })()`);
+    await click(".cm-content[contenteditable=true]");
+    await cdp("Input.insertText", { text: "\nKeep unsaved edit after failure\n" });
+    await openReused(file, false);
+    assert.equal(await evaluate('new URL(location.href).searchParams.get("file")'), "README.md");
+    assert.ok(await evaluate('document.querySelector(".cm-content").textContent.includes("Keep unsaved edit after failure")'));
+    await evaluate("window.fetch = window.linkSmokeFetch");
+    await click(".cm-content[contenteditable=true]");
+    await cdp("Input.insertText", { text: "\nSave recovered\n" });
+    await openReused(file);
+    assert.ok(readFileSync(path.join(fixture, "README.md"), "utf8").includes("Keep unsaved edit after failure"));
+    await click("#mode-preview");
+    console.log("Same-worktree links preserve Preview/Live/Source, pending edits, and the page:", JSON.stringify(timings));
     const exactLink = openGlanceDeepLinkUrl({ repository, file: "README.md", worktree: worktreeIdForPath(linked) });
     await openRequest([exactLink]);
     await waitForDocument("Task worktree");
@@ -166,7 +221,8 @@ try {
     console.log("Explicit worktree link opened the requested task checkout.");
     // A document present only in main must still fail for an exact task link.
     await openRequest([openGlanceDeepLinkUrl({ repository, file, worktree: worktreeIdForPath(linked) })]);
-    await until(() => evaluate('!!document.querySelector("#document-content .error-message")'));
+    await until(() => evaluate('!document.querySelector("#copy-toast").hidden'));
+    assert.match(await evaluate('document.querySelector("#copy-toast").textContent'), /ENOENT|not found|不存在|找不到/i);
     assert.equal(await evaluate('fetch("/api/worktrees").then(r => r.json()).then(r => r.currentWorktreeId)'), worktreeIdForPath(linked));
     await click('[data-tree-path="README.md"]');
     await waitForDocument("Task worktree");

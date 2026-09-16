@@ -263,6 +263,7 @@ async function handleRequest(request, response, context) {
     requestUrl.pathname === "/tree-state.js" ||
     requestUrl.pathname === "/workbench-session.js" ||
     requestUrl.pathname === "/workbench-startup.js" ||
+    requestUrl.pathname === "/desktop-document-navigation.js" ||
     requestUrl.pathname === "/telemetry.js" ||
     requestUrl.pathname === "/source-editor.bundle.js"
   ) {

@@ -29,6 +29,7 @@ import {
   sidebarWidthFromStorageValue,
 } from "./layout.js";
 import { createUiTooltip, elementIsOverflowing } from "./ui-tooltip.js";
+import { DESKTOP_OPEN_DOCUMENT_EVENT, createDesktopDocumentNavigationHandler } from "./desktop-document-navigation.js";
 import { attachHorizontalPointerResize } from "./pointer-resize.js";
 import {
   activeOutlineIdForSourceLine,
@@ -365,6 +366,7 @@ const state = {
   sourceEditor: null,
   sourceSyncTimer: null,
   sourceWriteInFlight: false,
+  sourceSyncState: "idle",
   lastSourceEditAt: 0,
   sourceRevision: 0,
   scrollSyncSource: null,
@@ -735,6 +737,29 @@ window.addEventListener("git-leaf-desktop-shortcut", handleDesktopShortcutEvent)
 window.addEventListener("git-leaf-desktop-repositories", handleDesktopRepositoriesEvent);
 window.addEventListener("git-leaf-desktop-update-status", handleDesktopUpdateStatusEvent);
 window.addEventListener("git-leaf-desktop-preferences", handleDesktopPreferencesEvent);
+window.addEventListener(DESKTOP_OPEN_DOCUMENT_EVENT, createDesktopDocumentNavigationHandler({
+  isReady: () => !document.documentElement.classList.contains("is-workbench-loading"),
+  getWorktreeId: () => state.currentWorktreeId,
+  prepareNavigation: async () => {
+    // Wait for an existing write before flushing a newer debounced edit.
+    const startedAt = Date.now();
+    while (state.sourceWriteInFlight && Date.now() - startedAt < 3_000) await delay(50);
+    if (state.sourceWriteInFlight) throw new Error(t("sourceSync.error"));
+    await flushPendingSourceSync();
+    if (state.sourceWriteInFlight || state.sourceSyncTimer || state.sourceSyncState === "error") {
+      throw new Error(t("sourceSync.error"));
+    }
+  },
+  navigate: async (file) => {
+    const revision = state.sourceRevision;
+    closeRepositoryPanel();
+    return navigateDocumentLocation({ path: file }, {
+      behavior: "reuse",
+      canApply: () => revision === state.sourceRevision && state.remoteSyncOperation !== "merge",
+    });
+  },
+  onError: () => showCopyToast(t("sourceSync.error")),
+}));
 window.addEventListener("focus", handleToolStatusActivity);
 window.addEventListener("focus", refreshWorktreesOnWindowFocus);
 window.addEventListener("focus", handleRemoteSyncWindowFocus);
@@ -2039,6 +2064,7 @@ async function navigateDocumentLocation(
   {
     behavior = "current",
     applySavedMode = false,
+    canApply = () => true,
   } = {},
 ) {
   const filePath = String(location?.file || location?.path || "");
@@ -2070,7 +2096,7 @@ async function navigateDocumentLocation(
   captureActiveDocumentLocation();
   const requestId = ++state.documentNavigationRequestId;
   const documentData = await fetchDocumentData(filePath, { repoId });
-  if (!documentData || requestId !== state.documentNavigationRequestId) {
+  if (!documentData || requestId !== state.documentNavigationRequestId || !canApply()) {
     return false;
   }
 
@@ -4165,6 +4191,7 @@ function delay(ms) {
 }
 
 function updateSourceSyncStatus(nextState) {
+  state.sourceSyncState = nextState;
   const label = syncLabelForState(nextState, state.locale);
   const status = document.querySelector("#source-sync-status");
   if (!label) {

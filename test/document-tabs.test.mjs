@@ -34,6 +34,21 @@ function location(path, { hash = "", scrollTop = 0 } = {}) {
   return { path, hash, scrollTop };
 }
 
+test("desktop document navigation reuses an existing tab with its history and otherwise opens a new tab", () => {
+  const tabs = [tab("readme", "README.md"), tab("guide", "guide.md", [location("guide.md", { scrollTop: 120 })])];
+  const reused = navigateDocumentTab({ tabs, activeTabId: "readme", location: { path: "guide.md" }, behavior: "reuse" });
+  assert.equal(reused.activeTabId, "guide");
+  assert.equal(reused.tabs.length, 2);
+  assert.equal(reused.location.scrollTop, 120);
+  const opened = navigateDocumentTab({ ...reused, location: { path: "new.md" }, behavior: "reuse" });
+  assert.equal(opened.tabs.length, 3);
+  assert.equal(opened.location.path, "new.md");
+  assert.deepEqual(opened.tabs.slice(0, 2), reused.tabs);
+  const repeated = navigateDocumentTab({ ...opened, location: { path: "new.md" }, behavior: "reuse" });
+  assert.equal(repeated.activeTabId, opened.activeTabId);
+  assert.equal(repeated.tabs.length, 3);
+});
+
 test("tabTitleFromPath shows the file name", () => {
   assert.equal(tabTitleFromPath("docs/guides/github-apps-management.md"), "github-apps-management.md");
 });

@@ -159,10 +159,16 @@ export function navigateDocumentTab({
     return navigationResult(normalized, activeId);
   }
 
-  if (behavior === "background" || behavior === "foreground") {
+  if (behavior === "reuse") {
+    const existing = normalized.find((tab) => tab.id === activeId && tab.path === target.path)
+      ?? normalized.find((tab) => tab.path === target.path);
+    if (existing) return navigationResult(normalized, existing.id);
+  }
+
+  if (behavior === "background" || behavior === "foreground" || behavior === "reuse") {
     const nextTab = createDocumentTab(normalized, target);
     const nextTabs = [...normalized, nextTab];
-    return navigationResult(nextTabs, behavior === "foreground" ? nextTab.id : activeId, nextTab.id);
+    return navigationResult(nextTabs, behavior === "background" ? activeId : nextTab.id, nextTab.id);
   }
 
   const activeIndex = normalized.findIndex((tab) => tab.id === activeId);
