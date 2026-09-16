@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { linkPreviewTarget } from "../public/link-preview-target.js";
+import { milestonePreviewMetadata } from "../public/link-preview.js";
 import { markdownLinkPreview, renderMarkdown } from "../src/content/markdown.mjs";
 import { createLinkPreviewProvider } from "../src/server/link-preview.mjs";
 import { createPreviewServer } from "../src/server/index.mjs";
@@ -140,6 +141,38 @@ test("GitHub failures become safe actionable states without exposing command out
     const preview = createLinkPreviewProvider({ ghRunner: async () => { throw error; } });
     assert.deepEqual(await preview(request()), { kind: "github", status });
   }
+});
+
+test("milestone links show their description, status, UTC due date and issue progress through gh", async () => {
+  const calls = [];
+  const preview = githubProvider({
+    "repos/example/private/milestones/7": { title: "Next release", description: "Ship **link previews**.\n\nRollout checklist.", state: "open", due_on: "2026-09-30T23:59:59Z", open_issues: 2, closed_issues: 8 },
+  }, calls);
+  const result = await preview(request("/milestone/7?closed=1"));
+  assert.equal(result.status, "ok");
+  assert.equal(result.source, "milestone");
+  assert.equal(result.title, "Next release");
+  assert.equal(result.excerpt, "Ship link previews.\n\nRollout checklist.");
+  assert.deepEqual(result.milestone, { state: "open", dueDate: "2026-09-30", openIssues: 2, closedIssues: 8 });
+  assert.deepEqual(milestonePreviewMetadata(result.milestone, "en"), ["Open", "Due 2026-09-30", "Closed 8/10 (80%) · 2 open"]);
+  assert.deepEqual(milestonePreviewMetadata(result.milestone, "zh-CN"), ["进行中", "截止 2026-09-30", "已关闭 8/10（80%） · 2 未关闭"]);
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].args.slice(0, 5), ["api", "--hostname", "github.com", "--method", "GET"]);
+  for (const suffix of ["/milestone/0", "/milestone/-1", "/milestone/name", "/milestone/7/edit", "/milestones"]) {
+    assert.equal(linkPreviewTarget(github + suffix, context), null, suffix);
+  }
+});
+
+test("empty and closed milestones do not invent a due date or completion percentage", async () => {
+  const preview = githubProvider({
+    "repos/example/private/milestones/1": { title: "Empty", description: null, state: "closed", due_on: null, open_issues: 0, closed_issues: 0 },
+    "repos/example/private/milestones/2": new Error("HTTP 404"),
+  });
+  const result = await preview(request("/milestone/1"));
+  assert.equal(result.excerpt, "");
+  assert.deepEqual(milestonePreviewMetadata(result.milestone, "zh-CN"), ["已关闭", "未设置截止日期", "暂无 Issue 或 PR"]);
+  assert.deepEqual(milestonePreviewMetadata({ state: "closed", dueDate: null, openIssues: 0, closedIssues: 3 }, "en"), ["Closed", "No due date", "Closed 3/3 (100%) · 0 open"]);
+  assert.deepEqual(await preview(request("/milestone/2")), { kind: "github", status: "unavailable" });
 });
 
 test("GitHub cards show repository, merged PR, commit and release facts", async () => {

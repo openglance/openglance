@@ -6,6 +6,8 @@ const MESSAGES = {
     preview: "Link preview", loading: "Loading preview…", open: "Open", expand: "Read more", collapse: "Show less", close: "Close preview",
     empty: "No excerpt available.", document: "Local document", github: "GitHub · via gh", summary: "Summary", section: "Section", lines: "Source lines", excerpt: "Excerpt",
     repository: "Repository", issue: "Issue", pull: "Pull request", file: "File", commit: "Commit", release: "Release",
+    milestone: "Milestone", milestoneOpen: "Open", milestoneClosed: "Closed", milestoneDue: "Due {date}", milestoneNoDue: "No due date",
+    milestoneProgress: "Closed {closed}/{total} ({percent}%) · {open} open", milestoneEmpty: "No issues or pull requests",
     unavailable: "Not found or your current account does not have access.", location_missing: "This section or line range was not found.",
     repository_unavailable: "Preview is available for the current repository only. Open this link to switch repositories.",
     gh_missing: "Install GitHub CLI (gh) to preview GitHub links.", authentication_required: "Sign in using gh auth login, then hover again.",
@@ -20,6 +22,8 @@ const MESSAGES = {
     preview: "链接预览", loading: "正在加载预览……", open: "打开", expand: "展开原文", collapse: "收起", close: "关闭预览",
     empty: "暂无可预览的正文。", document: "本地文档", github: "GitHub · 通过 gh", summary: "摘要", section: "章节", lines: "源文件行号", excerpt: "原文摘录",
     repository: "仓库", issue: "Issue", pull: "Pull Request", file: "文件", commit: "提交", release: "Release",
+    milestone: "里程碑", milestoneOpen: "进行中", milestoneClosed: "已关闭", milestoneDue: "截止 {date}", milestoneNoDue: "未设置截止日期",
+    milestoneProgress: "已关闭 {closed}/{total}（{percent}%） · {open} 未关闭", milestoneEmpty: "暂无 Issue 或 PR",
     unavailable: "内容不存在，或当前账号没有访问权限。", location_missing: "未找到链接指向的章节或行号。",
     repository_unavailable: "目前仅预览当前仓库的文档；打开链接可切换仓库。",
     gh_missing: "安装 GitHub CLI（gh）后可预览 GitHub 链接。", authentication_required: "请先运行 gh auth login 登录，然后重新悬停。",
@@ -31,6 +35,20 @@ const MESSAGES = {
     file_excerpt: "当前显示文件摘录，尚未定位到此 GitHub 锚点。",
   },
 };
+
+export function milestonePreviewMetadata(milestone, locale) {
+  if (!milestone) return [];
+  const t = createTranslator(MESSAGES, locale);
+  const details = [];
+  if (milestone.state === "open" || milestone.state === "closed") details.push(t(milestone.state === "closed" ? "milestoneClosed" : "milestoneOpen"));
+  details.push(milestone.dueDate ? t("milestoneDue", { date: milestone.dueDate }) : t("milestoneNoDue"));
+  const { openIssues: open, closedIssues: closed } = milestone;
+  if (Number.isSafeInteger(open) && Number.isSafeInteger(closed) && open >= 0 && closed >= 0) {
+    const total = open + closed;
+    details.push(total ? t("milestoneProgress", { open, closed, total, percent: Math.round(closed / total * 100) }) : t("milestoneEmpty"));
+  }
+  return details;
+}
 
 export function attachLinkPreviews({ containers, getContext, isBlocked = () => false, load, onOpen }) {
   const card = document.createElement("section");
@@ -84,7 +102,7 @@ export function attachLinkPreviews({ containers, getContext, isBlocked = () => f
     header.append(close); card.append(header);
     if (payload?.title) card.append(element("div", "link-preview-title", payload.title));
     if (payload?.path) card.append(element("div", "link-preview-path", payload.path));
-    const metadata = [payload?.location, ...(payload?.metadata || [])].filter(Boolean).join(" · ");
+    const metadata = [payload?.location, ...(payload?.metadata || []), ...milestonePreviewMetadata(payload?.milestone, context().locale)].filter(Boolean).join(" · ");
     if (metadata) card.append(element("div", "link-preview-meta", metadata));
     const body = element("div", "link-preview-body");
     body.setAttribute("aria-live", "polite");

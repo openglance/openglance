@@ -173,7 +173,7 @@ JSX, JavaScript, imports, or scripts.
 ## Built for readable context
 
 - Hover previews in Preview and Live for local Markdown/MDX links and GitHub repositories, issues,
-  pull requests, files, commits, and releases. Local links show saved summaries, sections, or source
+  pull requests, milestones, files, commits, and releases. Local links show saved summaries, sections, or source
   lines; GitHub previews use the local `gh` login, including its private-repository permissions.
   Read more, open the target, or dismiss with Escape without leaving the current document.
 - All, Favorites, and Sync views, with a content-focused tree or the complete repository tree. Markdown

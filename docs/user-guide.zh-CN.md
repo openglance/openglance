@@ -116,8 +116,9 @@ Tab。
 上限，内容来自磁盘上已保存的文件。同仓库 OpenGlance 链接遵循主工作区或显式 worktree；分享链接的
 预览会标明“本地副本”，悬停不会同步仓库，也不会校验已发布版本。
 
-GitHub 仓库、Issue、PR、文件、提交和 Release 链接通过**本机 GitHub CLI（`gh`）**读取。需要时先安装
+GitHub 仓库、Issue、PR、Milestone、文件、提交和 Release 链接通过**本机 GitHub CLI（`gh`）**读取。需要时先安装
 并运行 `gh auth login` 登录；私有内容沿用当前账号已有权限。Git 能通过 SSH 同步，不代表 `gh` 已登录。
+Milestone 卡片展示描述、状态、截止日期和已关闭／总 Issue 与 PR 数量；没有事项时不计算百分比。
 文件行号锚点可定位；其他 GitHub 锚点会展示带提示的资源摘录，暂不读取评论或代码差异。未登录、权限
 不足或网络错误会在卡片内说明，原链接仍可使用。
 

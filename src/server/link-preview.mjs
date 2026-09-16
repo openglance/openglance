@@ -72,6 +72,16 @@ async function githubPreview(target, api) {
     return { ...common, status: "ok", title: text(data.full_name), excerpt: text(data.description), detail: text(data.description),
       metadata: [data.private ? "Private" : "Public", data.language, data.default_branch].filter(Boolean).map((value) => text(value)) };
   }
+  if (target.type === "milestone") {
+    const data = await api(`${base}/milestones/${target.number}`);
+    return { ...common, ...markdownLinkPreview(text(data.description, 80000)), source: "milestone",
+      title: text(data.title), milestone: {
+        state: ["open", "closed"].includes(data.state) ? data.state : null,
+        dueDate: /^\d{4}-\d{2}-\d{2}T/.test(data.due_on || "") && Number.isFinite(Date.parse(data.due_on)) ? data.due_on.slice(0, 10) : null,
+        openIssues: Number.isSafeInteger(data.open_issues) && data.open_issues >= 0 ? data.open_issues : null,
+        closedIssues: Number.isSafeInteger(data.closed_issues) && data.closed_issues >= 0 ? data.closed_issues : null,
+      } };
+  }
   if (["issue", "pull"].includes(target.type)) {
     const data = await api(`${base}/${target.type === "pull" ? "pulls" : "issues"}/${target.number}`);
     const content = markdownLinkPreview(text(data.body, 80000));

@@ -64,13 +64,13 @@ try {
   mkdirSync(fixture);
   const git = (args) => execFileSync("git", args, { cwd: fixture, stdio: "pipe" });
   git(["init", "-b", "main"]); git(["config", "user.name", "Preview smoke"]); git(["config", "user.email", "smoke@example.invalid"]);
-  writeFileSync(path.join(fixture, "README.md"), "# Link previews\n\nHover over a link to read without leaving this document.\n\n[Document overview](guide.md) · [Specific section](guide.md#rollout) · [Source lines](guide.md#L7-L9)\n\n[GitHub issue](https://github.com/exampleorg/preview-smoke/issues/42) · [Missing issue](https://github.com/exampleorg/preview-smoke/issues/404)\n\n[Slow issue](https://github.com/exampleorg/preview-smoke/issues/43)\n");
+  writeFileSync(path.join(fixture, "README.md"), "# Link previews\n\nHover over a link to read without leaving this document.\n\n[Document overview](guide.md) · [Specific section](guide.md#rollout) · [Source lines](guide.md#L7-L9)\n\n[GitHub issue](https://github.com/exampleorg/preview-smoke/issues/42) · [Missing issue](https://github.com/exampleorg/preview-smoke/issues/404)\n\n[Slow issue](https://github.com/exampleorg/preview-smoke/issues/43) · [Milestone](https://github.com/exampleorg/preview-smoke/milestone/7)\n");
   const guide = "---\ntitle: Release guide\ndescription: A short overview of the release workflow, with a checklist for the next rollout.\n---\n# Release guide\n\nRead the checklist before publishing.\n\n## Rollout\n\nRollout details stay scoped to this section.\n\n" + "Verify the build, document the change and check the deployment.\n\n".repeat(10) + "## Next section\n\nUnrelated text.\n";
   writeFileSync(path.join(fixture, "guide.md"), guide);
   git(["add", "."]); git(["commit", "-m", "Fixture"]);
   const bin = path.join(root, "bin"); mkdirSync(bin);
   const gh = path.join(bin, "gh");
-  writeFileSync(gh, `#!${process.execPath}\nconst endpoint=process.argv.at(-1);\nif (!process.argv.includes("api")) { console.log("github.com: logged in for preview smoke"); process.exit(0); }\nif (endpoint.endsWith("/404")) { console.error("gh: Not Found (HTTP 404)"); process.exit(1); }\nconst slow=endpoint.endsWith("/43");\nsetTimeout(()=>console.log(JSON.stringify({title:slow?"Slow response":"Review link preview behavior",body:"Private GitHub issue content returned by the local gh fixture.\\n\\nCheck the hover card in both Preview and Live.",state:"open",user:{login:"preview-tester"},labels:[{name:"enhancement"}]})),slow?1800:80);\n`);
+  writeFileSync(gh, `#!${process.execPath}\nconst endpoint=process.argv.at(-1);\nif (!process.argv.includes("api")) { console.log("github.com: logged in for preview smoke"); process.exit(0); }\nif (endpoint.endsWith("/404")) { console.error("gh: Not Found (HTTP 404)"); process.exit(1); }\nif (endpoint.includes("/milestones/")) { console.log(JSON.stringify({title:"Next release",description:"Ship link previews for local documents and GitHub.",state:"open",due_on:"2026-09-30T23:59:59Z",open_issues:2,closed_issues:8})); process.exit(0); }\nconst slow=endpoint.endsWith("/43");\nsetTimeout(()=>console.log(JSON.stringify({title:slow?"Slow response":"Review link preview behavior",body:"Private GitHub issue content returned by the local gh fixture.\\n\\nCheck the hover card in both Preview and Live.",state:"open",user:{login:"preview-tester"},labels:[{name:"enhancement"}]})),slow?1800:80);\n`);
   chmodSync(gh, 0o755);
   const portServer = createServer(); await new Promise((resolve) => portServer.listen(0, "127.0.0.1", resolve));
   const port = portServer.address().port; await new Promise((resolve) => portServer.close(resolve));
@@ -117,13 +117,20 @@ try {
     const issue = mode === "preview" ? '#document-content a[href$="issues/42"]' : '[data-link-preview-href$="issues/42"]';
     await hover(issue); await waitText("Private GitHub issue content");
     await screenshot(`link-preview-github-${mode}.png`); await dismiss();
+    const milestone = mode === "preview" ? '#document-content a[href$="milestone/7"]' : '[data-link-preview-href$="milestone/7"]';
+    await hover(milestone); await waitText("Next release");
+    assert.match(await previewText(), /Ship link previews for local documents and GitHub/);
+    assert.match(await previewText(), /2026-09-30/);
+    assert.match(await previewText(), /8\/10.*80%/);
+    assert.equal(await evaluate('document.querySelector("#link-preview .link-preview-open").href'), "https://github.com/exampleorg/preview-smoke/milestone/7");
+    await screenshot(`link-preview-milestone-${mode}.png`); await dismiss();
     const missing = mode === "preview" ? '#document-content a[href$="issues/404"]' : '[data-link-preview-href$="issues/404"]';
     await hover(missing); await until(async () => /does not have access|没有访问权限/.test(await previewText())); await dismiss();
     const slow = mode === "preview" ? '#document-content a[href$="issues/43"]' : '[data-link-preview-href$="issues/43"]';
     await hover(slow); await until(() => evaluate('!document.querySelector("#link-preview").hidden'));
     await hover(link); await waitText("A short overview"); await delay(2200);
     assert.doesNotMatch(await previewText(), /Slow response/); await dismiss();
-    console.log(`${mode}: stationary hover, card retention, expand, section, gh, denied access, stale responses and Escape passed.`);
+    console.log(`${mode}: stationary hover, card retention, expand, section, gh milestone, denied access, stale responses and Escape passed.`);
   }
   await click("#mode-preview");
   await evaluate('document.querySelector("#document-content a").focus()');

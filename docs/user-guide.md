@@ -138,11 +138,13 @@ lines, including frontmatter in the numbering. Excerpts are bounded, and preview
 Same-repository OpenGlance links respect the primary or explicitly selected worktree. A share-link
 preview is labeled as a local copy; hovering never synchronizes or verifies its published revision.
 
-GitHub repository, Issue, PR, file, commit, and Release links use **GitHub CLI (`gh`) on this computer**.
-Install it and run `gh auth login` once if needed. Private content follows that login's existing access;
-Git working through SSH alone does not establish a `gh` login. File line anchors are supported. Other
-GitHub anchors show a labeled resource excerpt; comments and diffs are not fetched. An unavailable
-preview leaves the original link usable and explains missing login, denied access, or network errors.
+GitHub repository, Issue, PR, Milestone, file, commit, and Release links use **GitHub CLI (`gh`) on this
+computer**. Install it and run `gh auth login` once if needed. Private content follows that login's
+existing access; Git working through SSH alone does not establish a `gh` login. Milestone cards show
+the description, open/closed state, due date, and the closed/total Issue and PR count. An empty
+milestone shows no percentage. File line anchors are supported. Other GitHub anchors show a labeled
+resource excerpt; comments and diffs are not fetched. An unavailable preview leaves the original link
+usable and explains missing login, denied access, or network errors.
 
 Previews do not generate AI summaries, send content to an AI service, or persist GitHub content in a
 preview cache. Re-hovering uses the current `gh` credentials. Other website and GitHub Enterprise hosts

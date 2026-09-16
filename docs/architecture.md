@@ -630,6 +630,9 @@ inherits the user's current CLI authentication and never exports a token to the 
 file refs resolve against matching Git refs before reading Contents at the resolved SHA when the
 ref/path split could be ambiguous. Unambiguous file URLs use their explicit ref directly. GitHub file
 line anchors use original source lines; other anchors are explicitly labeled as resource excerpts.
+Milestone URLs (`/milestone/{number}`) read the dedicated Milestones endpoint. Structured status,
+UTC calendar due date, and open/closed Issue counts are formatted in the renderer locale; zero total
+counts show an empty state instead of a completion percentage.
 CLI errors map to bounded public states rather than exposing command stderr or private paths.
 
 GitHub payloads are neither persisted nor reused across hovers; the API sends `Cache-Control: no-store`.

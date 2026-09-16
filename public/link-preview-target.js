@@ -50,6 +50,9 @@ function githubPreviewTarget(url) {
   if (parts.some((part) => !part || /[\u0000-\u001f\\]/.test(part) || part.split("/").some((segment) => segment === "." || segment === ".."))) return null;
   const base = { kind: "github", owner, repo, hash: url.hash, url: `${url.origin}${url.pathname}${url.hash}` };
   if (!type) return { ...base, type: "repository" };
+  if (type === "milestone" && /^[1-9]\d*$/.test(tail[0] || "") && tail.length === 1) {
+    return { ...base, type: "milestone", number: tail[0] };
+  }
   if (["issues", "pull"].includes(type) && /^\d+$/.test(tail[0] || "") && tail.length === 1) {
     return { ...base, type: type === "pull" ? "pull" : "issue", number: tail[0] };
   }
