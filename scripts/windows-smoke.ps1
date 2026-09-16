@@ -56,7 +56,6 @@ function Save-DesktopScreenshot {
 function Wait-OpenGlanceHealth {
   param(
     [int]$TimeoutSecondsValue,
-    [string]$ExpectedInitialFile = "",
     [string]$ExpectedRepoRoot = ""
   )
 
@@ -77,8 +76,7 @@ function Wait-OpenGlanceHealth {
         }
         if (
           $response.StatusCode -eq 200 -and
-          $repoMatches -and
-          (!$ExpectedInitialFile -or $payload.initialFile -eq $ExpectedInitialFile)
+          $repoMatches
         ) {
           Write-SmokeLog "Health check passed at $url"
           return $url
@@ -90,7 +88,7 @@ function Wait-OpenGlanceHealth {
     Start-Sleep -Seconds 1
   }
 
-  throw "Timed out waiting for OpenGlance health check. ExpectedRepoRoot=$ExpectedRepoRoot ExpectedInitialFile=$ExpectedInitialFile LastError=$lastError"
+  throw "Timed out waiting for OpenGlance health check. ExpectedRepoRoot=$ExpectedRepoRoot LastError=$lastError"
 }
 
 function Invoke-OpenGlanceSyncSmoke {
@@ -314,9 +312,10 @@ try {
   $deepLink = "openglance://open?repo=$encodedRepoRoot&path=docs%2Fnotes.md"
   Write-SmokeLog "Opening registered protocol deep link: $deepLinkPath"
   Start-Process -FilePath $deepLink
+  # initialFile describes server startup. Reused workbenches acknowledge the
+  # active document through persisted session state instead of restarting it.
   $healthUrl = Wait-OpenGlanceHealth `
     -TimeoutSecondsValue $TimeoutSeconds `
-    -ExpectedInitialFile $deepLinkPath `
     -ExpectedRepoRoot $repoRootPath
   Wait-OpenGlanceActiveDocument `
     -ConfigPath $desktopConfig `
@@ -330,7 +329,6 @@ try {
   Start-Process -FilePath $legacyDeepLink
   $healthUrl = Wait-OpenGlanceHealth `
     -TimeoutSecondsValue $TimeoutSeconds `
-    -ExpectedInitialFile $legacyDeepLinkPath `
     -ExpectedRepoRoot $repoRootPath
   Wait-OpenGlanceActiveDocument `
     -ConfigPath $desktopConfig `

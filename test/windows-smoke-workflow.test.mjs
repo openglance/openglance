@@ -79,7 +79,6 @@ test("Windows smoke script starts the packaged app, checks health, captures UI, 
   assert.match(script, /did not preserve the Git Leaf repository list/);
   assert.match(script, /did not remove the superseded Git Leaf installation/);
   assert.match(script, /docs%2Fnotes\.md/);
-  assert.match(script, /ExpectedInitialFile/);
   assert.match(script, /activeTabPath/);
   assert.match(script, /Deep link opened requested document/);
   assert.match(script, /api\/health"/);

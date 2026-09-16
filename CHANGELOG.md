@@ -10,6 +10,8 @@ the [OpenGlance download page](https://gitleaf.mangofuture.com/download).
 
 - Reused the active workbench when opening document links in the same worktree, preserving open
   tabs and navigation state without reloading the workspace.
+- Updated Windows release smoke to verify the active document independently of the server's initial
+  file, covering document links that reuse an existing workbench.
 
 ## 3.2.5 — 2026-09-15 (internal release)
 
