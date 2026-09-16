@@ -4,6 +4,13 @@ OpenGlance follows Semantic Versioning for its shared app version. Git tags iden
 official public artifacts, signatures, checksums, and platform availability are authoritative only on
 the [OpenGlance download page](https://gitleaf.mangofuture.com/download).
 
+## 3.2.6 — 2026-09-16 (internal release)
+
+### Fixed
+
+- Reused the active workbench when opening document links in the same worktree, preserving open
+  tabs and navigation state without reloading the workspace.
+
 ## 3.2.5 — 2026-09-15 (internal release)
 
 ### Fixed
