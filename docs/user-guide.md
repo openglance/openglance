@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-27
+last_updated: 2026-09-16
 ---
 
 # OpenGlance user guide
@@ -124,6 +124,29 @@ or Ctrl-click on Windows to open a link in another tab.
 
 Source-backed line numbers are also useful when you need to show an AI agent exactly where a question
 or correction came from.
+
+### Preview a link before opening it
+
+In Preview or Live, pause over a local Markdown/MDX link or a supported `github.com` link. A small card
+appears without navigating. Move into the card to keep it open, expand its excerpt, or choose **Open**.
+Press `Escape` to dismiss it. In Preview, focusing a link also shows its card; `Alt+Down` moves keyboard
+focus into the card. Clicking the original link keeps its existing navigation or Live editing behavior.
+
+Whole-document previews prefer saved frontmatter `description`, `summary`, then `ai_snippet`, falling
+back to the opening text. Section links show that section; `#L10-L15` links show the original source
+lines, including frontmatter in the numbering. Excerpts are bounded, and previews read saved files.
+Same-repository OpenGlance links respect the primary or explicitly selected worktree. A share-link
+preview is labeled as a local copy; hovering never synchronizes or verifies its published revision.
+
+GitHub repository, Issue, PR, file, commit, and Release links use **GitHub CLI (`gh`) on this computer**.
+Install it and run `gh auth login` once if needed. Private content follows that login's existing access;
+Git working through SSH alone does not establish a `gh` login. File line anchors are supported. Other
+GitHub anchors show a labeled resource excerpt; comments and diffs are not fetched. An unavailable
+preview leaves the original link usable and explains missing login, denied access, or network errors.
+
+Previews do not generate AI summaries, send content to an AI service, or persist GitHub content in a
+preview cache. Re-hovering uses the current `gh` credentials. Other website and GitHub Enterprise hosts
+are outside this preview scope.
 
 ### Return to unpublished edits
 

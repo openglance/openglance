@@ -3,7 +3,7 @@ title: OpenGlance system architecture
 domain: ai
 type: architecture
 owner: maintainer
-last_updated: 2026-08-27
+last_updated: 2026-09-16
 source: openglance
 canonical: true
 ai_snippet: "[Architecture] OpenGlance | human desktop interface for shared context repositories | local HTTP service | Git worktrees | Preview Source Live | CodeMirror 6 | guarded Git sync"
@@ -609,6 +609,35 @@ Neither action starts during merge, rebase, cherry-pick, revert, or an existing 
 publish rebase attempts `rebase --abort`. Divergence, conflicts, repeated workspace drift, and
 unexpected Git state stop safely. A copyable prompt for the user's chosen AI agent is the final fallback,
 and the down-only prompt explicitly requires an uncommitted, unpushed result.
+
+## Link hover previews
+
+Preview and Live share an on-demand, nonmodal link card. `public/link-preview-target.js` classifies a
+finite set of local Markdown/MDX and `https://github.com` resource URLs in both renderer and service.
+The renderer waits for deliberate hover or link focus, cancels obsolete fetches, and rejects results
+after navigation or source changes. Moving into the card retains it; Escape dismisses it. The card
+uses text nodes for all remote content and never renders returned HTML, images, or executable MDX.
+
+`GET /api/link-preview` uses the existing localhost and same-origin request boundary. Document reads
+resolve real paths within the selected repository/worktree and are bounded by file size. Heading IDs
+and line offsets share the document parser. Same-repository hosted links resolve the primary or exact
+worktree without selecting it; cross-repository links remain unavailable until opened. Shared links
+only preview a labeled local copy and cannot trigger fetch, sync, publication, or revision verification.
+
+The GitHub provider executes `gh api --hostname github.com --method GET` with fixed allowlisted route
+shapes, argument arrays, deadlines, output limits, and at most two concurrent preview operations. It
+inherits the user's current CLI authentication and never exports a token to the renderer. Slash-bearing
+file refs resolve against matching Git refs before reading Contents at the resolved SHA when the
+ref/path split could be ambiguous. Unambiguous file URLs use their explicit ref directly. GitHub file
+line anchors use original source lines; other anchors are explicitly labeled as resource excerpts.
+CLI errors map to bounded public states rather than exposing command stderr or private paths.
+
+GitHub payloads are neither persisted nor reused across hovers; the API sends `Cache-Control: no-store`.
+Dismissal removes card content, and each request uses current credentials. No AI service or public
+preview proxy participates. The regression suite covers path containment, worktree identity,
+authentication changes, endpoint boundaries, and source extraction. `make smoke-link-previews-mac`
+uses the isolated development App to exercise Preview and Live, stationary hover through multiple
+refresh cycles, keyboard dismissal, card retention, expansion, and asynchronous race handling.
 
 ## Deep links and hosted handoff
 

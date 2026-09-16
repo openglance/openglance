@@ -4416,6 +4416,7 @@ export function liveInlineRangesForLine(text) {
     push(link.from, link.textFrom, "cm-live-marker");
     push(link.textFrom, link.textTo, "cm-live-link-text", {
       "data-live-link": "true",
+      "data-link-preview-href": link.href,
       "data-live-link-from": String(link.from),
       "data-live-link-to": String(link.to),
     });

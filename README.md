@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-15
+last_updated: 2026-09-16
 ---
 
 # OpenGlance
@@ -172,6 +172,10 @@ JSX, JavaScript, imports, or scripts.
 
 ## Built for readable context
 
+- Hover previews in Preview and Live for local Markdown/MDX links and GitHub repositories, issues,
+  pull requests, files, commits, and releases. Local links show saved summaries, sections, or source
+  lines; GitHub previews use the local `gh` login, including its private-repository permissions.
+  Read more, open the target, or dismiss with Escape without leaving the current document.
 - All, Favorites, and Sync views, with a content-focused tree or the complete repository tree. Markdown
   and MDX files with non-Chinese source names show their document title below the unchanged filename by
   default. The filename is slightly muted so the title is easier to scan; this second line can be turned

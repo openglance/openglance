@@ -71,6 +71,7 @@ import { publishOpenGlanceShareLink } from "./git-share-publish.mjs";
 import { githubFileUrl } from "../../public/file-actions.js";
 import { sourceLinesFromMarkdown } from "../../public/line-selection.js";
 import { normalizeSidebarFavorites } from "../../public/sidebar-favorites.js";
+import { createLinkPreviewProvider } from "./link-preview.mjs";
 
 const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const PUBLIC_ROOT = path.join(APP_ROOT, "public");
@@ -117,6 +118,7 @@ export function createPreviewServer({
   getRepositoryFavorites = null,
   mutateRepositoryFavorite = null,
   recordTelemetryActions = null,
+  ghRunner,
 }) {
   const assetVersion = String(Date.now());
   const serverContext = {
@@ -132,6 +134,7 @@ export function createPreviewServer({
     getRepositoryFavorites,
     mutateRepositoryFavorite,
     recordTelemetryActions,
+    linkPreview: createLinkPreviewProvider({ ghRunner }),
     managedPlaceholders: new Set(),
     remoteMergePreparations: createRemoteMergePreparationStore(),
   };
@@ -236,6 +239,8 @@ async function handleRequest(request, response, context) {
     requestUrl.pathname === "/tree-refresh.js" ||
     requestUrl.pathname === "/document-refresh.js" ||
     requestUrl.pathname === "/chart-tooltip.js" ||
+    requestUrl.pathname === "/link-preview.js" ||
+    requestUrl.pathname === "/link-preview-target.js" ||
     requestUrl.pathname === "/dataset-view.js" ||
     requestUrl.pathname === "/mermaid-layout.js" ||
     requestUrl.pathname === "/mermaid-view.js" ||
@@ -631,6 +636,22 @@ async function handleRequest(request, response, context) {
     }
     await context.restartSelf();
     sendJson(response, 200, { restarting: true });
+    return;
+  }
+
+  if (requestUrl.pathname === "/api/link-preview") {
+    const repo = await localRequestRepository(request, requestUrl, context);
+    response.setHeader("Cache-Control", "no-store");
+    if (request.method !== "GET") {
+      sendJson(response, 405, { error: "Method not allowed" });
+      return;
+    }
+    sendJson(response, 200, await context.linkPreview({
+      href: requestUrl.searchParams.get("href") || "",
+      file: requestUrl.searchParams.get("file") || "",
+      origin: `http://${request.headers.host}`,
+      repo,
+    }));
     return;
   }
 

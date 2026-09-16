@@ -65,6 +65,67 @@ export function extractTitle(markdown, fallbackPath) {
   return extractDocumentTitle(markdown) || posixBasename(fallbackPath);
 }
 
+// Uses the same parser, heading IDs and frontmatter offset as document rendering.
+export function markdownLinkPreview(markdown, { file = "", hash = "" } = {}) {
+  const title = extractTitle(markdown, file);
+  const { source, lineOffset } = stripFrontmatter(markdown);
+  const tokens = createRenderer({}).parse(source, {});
+  const headings = [];
+  const env = {};
+  for (let index = 0; index < tokens.length; index++) {
+    const token = tokens[index];
+    if (token.type !== "heading_open") continue;
+    const text = plainText(tokens[index + 1]?.content || "");
+    headings.push({ id: uniqueHeadingId(text, env), title: text, level: Number(token.tag.slice(1)), line: token.map[0] + lineOffset });
+  }
+  let anchor;
+  try { anchor = decodeURIComponent(hash.replace(/^#/, "")); }
+  catch { return { title, status: "location_missing" }; }
+  const lines = markdown.split(/\r?\n/);
+  const range = /^L(\d+)(?:-L?(\d+))?$/.exec(anchor);
+  if (range) {
+    const start = Number(range[1]);
+    const end = Number(range[2] || range[1]);
+    if (start < 1 || end < start || start > lines.length) return { title, status: "location_missing" };
+    const detail = lines.slice(start - 1, Math.min(end, start + 119)).join("\n").slice(0, 10000);
+    return { status: "ok", title, source: "lines", location: `L${start}${end === start ? "" : `–L${end}`}`, excerpt: detail.slice(0, 700), detail, code: true };
+  }
+  let body = source;
+  let heading;
+  if (anchor) {
+    heading = headings.find((item) => item.id === anchor);
+    if (!heading) return { title, status: "location_missing" };
+    const next = headings.find((item) => item.line > heading.line && item.level <= heading.level);
+    body = lines.slice(heading.line, next?.line ?? lines.length).join("\n");
+  }
+  const bodyTokens = createRenderer({}).parse(body, {});
+  const blocks = [];
+  for (let index = 0; index < bodyTokens.length; index++) {
+    const token = bodyTokens[index];
+    if (token.type === "inline") {
+      if (blocks.length === 0 && bodyTokens[index - 1]?.type === "heading_open") continue;
+      const text = (token.children ?? []).map((child) => ["text", "code_inline"].includes(child.type)
+        ? child.content : ["softbreak", "hardbreak"].includes(child.type) ? "\n" : "").join("").trim();
+      if (text) blocks.push(text);
+    } else if (["fence", "code_block"].includes(token.type)) {
+      blocks.push(token.content.trim());
+    }
+  }
+  const detail = blocks.join("\n\n").slice(0, 10000);
+  const summary = !anchor && ["description", "summary", "ai_snippet"]
+    .map((key) => previewSummaryField(markdown, key)).find(Boolean);
+  return { status: "ok", title, source: heading ? "section" : summary ? "summary" : "excerpt",
+    location: heading?.title || "", excerpt: (summary || detail).slice(0, 700), detail };
+}
+
+function previewSummaryField(markdown, key) {
+  const scalar = extractFrontmatterScalar(markdown, key);
+  if (scalar) return scalar;
+  const frontmatter = markdown.match(FRONT_MATTER_RE)?.[0] || "";
+  const match = new RegExp(`^${key}:\\s*([|>])[+-]?\\s*\\r?\\n((?:[ \\t]+[^\\n]*(?:\\n|$))+)`, "m").exec(frontmatter);
+  return match ? match[2].split(/\r?\n/).map((line) => line.trim()).join(match[1] === ">" ? " " : "\n").trim() : "";
+}
+
 export function extractDocumentTitle(markdown) {
   const frontmatterTitle = extractFrontmatterScalar(markdown, "title");
   if (frontmatterTitle) {

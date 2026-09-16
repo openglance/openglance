@@ -37106,6 +37106,8 @@ var WORKBENCH_MESSAGES = Object.freeze({
     "document.emptyTitle": "No file open",
     "document.emptyDetail": "Select a repository file from the sidebar. Markdown and MDX can be edited; other files are read-only.",
     "sync.agentTitle": "AI Agent assistance required",
+    "sync.noteLabel": "Change summary (optional)",
+    "sync.notePlaceholder": "What changed? Leave blank to generate automatically.",
     "sync.agentDetail": "Your local changes are preserved. You can hand this off to an AI Agent to finish syncing.",
     "error.repositoryList": "Could not read the repository list.",
     "error.noRepository": "No repository is available.",
@@ -37576,6 +37578,8 @@ var WORKBENCH_MESSAGES = Object.freeze({
     "document.emptyTitle": "\u672A\u6253\u5F00\u6587\u4EF6",
     "document.emptyDetail": "\u4ECE\u5DE6\u4FA7\u76EE\u5F55\u6811\u9009\u62E9\u4ED3\u5E93\u6587\u4EF6\u3002Markdown / MDX \u652F\u6301\u7F16\u8F91\uFF0C\u5176\u4ED6\u6587\u4EF6\u53EA\u8BFB\u67E5\u770B\u3002",
     "sync.agentTitle": "\u9700\u8981 AI Agent \u5904\u7406",
+    "sync.noteLabel": "\u672C\u6B21\u4FEE\u6539\u6458\u8981\uFF08\u9009\u586B\uFF09",
+    "sync.notePlaceholder": "\u7B80\u5355\u8BF4\u8BF4\u6539\u4E86\u4EC0\u4E48\uFF1B\u7559\u7A7A\u81EA\u52A8\u751F\u6210",
     "sync.agentDetail": "\u672C\u5730\u4FEE\u6539\u90FD\u5DF2\u4FDD\u7559\uFF0C\u53EF\u4EE5\u4EA4\u7ED9 AI Agent \u7EE7\u7EED\u5B8C\u6210\u540C\u6B65\u3002",
     "error.repositoryList": "\u65E0\u6CD5\u8BFB\u53D6\u4ED3\u5E93\u5217\u8868\u3002",
     "error.noRepository": "\u6CA1\u6709\u53EF\u7528\u4ED3\u5E93\u3002",
@@ -41806,6 +41810,7 @@ function liveInlineRangesForLine(text2) {
     push(link2.from, link2.textFrom, "cm-live-marker");
     push(link2.textFrom, link2.textTo, "cm-live-link-text", {
       "data-live-link": "true",
+      "data-link-preview-href": link2.href,
       "data-live-link-from": String(link2.from),
       "data-live-link-to": String(link2.to)
     });

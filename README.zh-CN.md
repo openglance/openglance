@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-15
+last_updated: 2026-09-16
 ---
 
 # OpenGlance
@@ -148,6 +148,9 @@ Preview 负责呈现文档，Source 和 Live 仍编辑原文件，不需要同�
 - 可搜索、可拖动排序的仓库面板，用于打开、切换仓库或将仓库移出 OpenGlance（不会删除本地文件）；
   切换仓库与 worktree 时分别恢复文档 Tab、导航历史、滚动位置和焦点。文档缺失时仍可使用工作台；
   仓库不可用时，首页保留已打开的仓库列表，方便进入其他仓库。
+- Preview 和 Live 支持悬停预览本地 Markdown／MDX 文档，以及 GitHub 仓库、Issue、PR、文件、提交和
+  Release。本地链接展示已保存的摘要、章节或源文件行；GitHub 使用本机 `gh` 的当前登录与私有仓库权限。
+  卡片可以展开摘录、打开目标，或按 Esc 关闭。
 - 只读预览图片、PDF、CSV、JSON、JSON Lines（`.ndjson`／`.jsonl`）、YAML、HTML、代码和其他仓库附件；CSV 单元格只包含仓库内 Markdown 链接时，可以直接打开对应文档。
 - 把选中内容作为引用粘贴，保留源文件行号与来源，并预留一个可以直接输入提示词的空白段落。
 - 克制的文件操作，避免把 OpenGlance 变成通用文件管理器或 IDE。

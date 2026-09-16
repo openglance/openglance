@@ -112,6 +112,7 @@ test("liveInlineRangesForLine marks source syntax separately from readable conte
     ranges.find((range) => range.className === "cm-live-link-text")?.attributes,
     {
       "data-live-link": "true",
+      "data-link-preview-href": "docs/report.md",
       "data-live-link-from": "32",
       "data-live-link-to": "56",
     },

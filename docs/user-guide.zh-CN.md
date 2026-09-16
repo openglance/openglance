@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-27
+last_updated: 2026-09-16
 ---
 
 # OpenGlance 用户手册
@@ -104,6 +104,25 @@ OpenGlance 内打开；在 macOS 使用 Command-click，在 Windows 使用 Ctrl-
 Tab。
 
 这些源文件行号也能在需要提问或纠正时，准确告诉 AI Agent 内容来自哪里。
+
+### 打开链接前先预览
+
+在 Preview 或 Live 中，将鼠标停在本地 Markdown／MDX 链接或支持的 `github.com` 链接上，即可看到
+预览卡片。将鼠标移入卡片可以继续阅读、展开摘录或点击“打开”；按 `Escape` 关闭。Preview 中通过
+键盘聚焦链接也能打开卡片，`Alt+↓` 将焦点移入卡片。直接点击原链接仍保留原有导航或 Live 编辑行为。
+
+整篇文档优先展示已保存 Frontmatter 中的 `description`、`summary`、`ai_snippet`，没有摘要时显示
+正文开头。章节链接展示对应章节；`#L10-L15` 展示包含 Frontmatter 行数在内的源文件行。摘录有长度
+上限，内容来自磁盘上已保存的文件。同仓库 OpenGlance 链接遵循主工作区或显式 worktree；分享链接的
+预览会标明“本地副本”，悬停不会同步仓库，也不会校验已发布版本。
+
+GitHub 仓库、Issue、PR、文件、提交和 Release 链接通过**本机 GitHub CLI（`gh`）**读取。需要时先安装
+并运行 `gh auth login` 登录；私有内容沿用当前账号已有权限。Git 能通过 SSH 同步，不代表 `gh` 已登录。
+文件行号锚点可定位；其他 GitHub 锚点会展示带提示的资源摘录，暂不读取评论或代码差异。未登录、权限
+不足或网络错误会在卡片内说明，原链接仍可使用。
+
+预览不即时生成 AI 摘要，不向 AI 服务发送内容，也不持久化缓存 GitHub 预览内容。重新悬停会使用当前
+`gh` 凭据。其他网站和 GitHub Enterprise 域名暂不在支持范围内。
 
 ### 快速回到尚未发布的编辑
 
