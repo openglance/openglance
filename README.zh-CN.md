@@ -150,6 +150,7 @@ Preview 负责呈现文档，Source 和 Live 仍编辑原文件，不需要同�
   仓库不可用时，首页保留已打开的仓库列表，方便进入其他仓库。
 - Preview 和 Live 支持悬停预览本地 Markdown／MDX 文档，以及 GitHub 仓库、Issue、PR、Milestone、文件、提交和
   Release。本地链接展示已保存的摘要、章节或源文件行；GitHub 使用本机 `gh` 的当前登录与私有仓库权限。
+  GitHub 请求复用连接，成功的预览在内存中保留最多 60 秒，加快重复悬停；切换 `gh` 登录后清除旧内容。
   卡片可以展开摘录、打开目标，或按 Esc 关闭。
 - 只读预览图片、PDF、CSV、JSON、JSON Lines（`.ndjson`／`.jsonl`）、YAML、HTML、代码和其他仓库附件；CSV 单元格只包含仓库内 Markdown 链接时，可以直接打开对应文档。
 - 把选中内容作为引用粘贴，保留源文件行号与来源，并预留一个可以直接输入提示词的空白段落。

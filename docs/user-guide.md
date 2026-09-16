@@ -146,8 +146,14 @@ milestone shows no percentage. File line anchors are supported. Other GitHub anc
 resource excerpt; comments and diffs are not fetched. An unavailable preview leaves the original link
 usable and explains missing login, denied access, or network errors.
 
-Previews do not generate AI summaries, send content to an AI service, or persist GitHub content in a
-preview cache. Re-hovering uses the current `gh` credentials. Other website and GitHub Enterprise hosts
+GitHub requests reuse connections. Successful previews stay in memory for up to 60 seconds, so repeated
+hovers are faster; simultaneous requests for the same link share a single read. Status and Milestone
+progress can therefore be up to one minute old. Each hover checks current local `gh` credentials;
+switching accounts or logging out clears retained content. A server-side permission change is detected
+on the next API read, which clears content if access is denied.
+
+Previews do not generate AI summaries, send content to an AI service, or save GitHub content in a disk
+cache. Closing the local service clears its memory cache. Other website and GitHub Enterprise hosts
 are outside this preview scope.
 
 ### Return to unpublished edits

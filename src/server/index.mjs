@@ -119,6 +119,7 @@ export function createPreviewServer({
   mutateRepositoryFavorite = null,
   recordTelemetryActions = null,
   ghRunner,
+  githubTransport,
 }) {
   const assetVersion = String(Date.now());
   const serverContext = {
@@ -134,7 +135,7 @@ export function createPreviewServer({
     getRepositoryFavorites,
     mutateRepositoryFavorite,
     recordTelemetryActions,
-    linkPreview: createLinkPreviewProvider({ ghRunner }),
+    linkPreview: createLinkPreviewProvider({ ghRunner, githubTransport }),
     managedPlaceholders: new Set(),
     remoteMergePreparations: createRemoteMergePreparationStore(),
   };
@@ -154,6 +155,7 @@ export function createPreviewServer({
       : null;
   };
   server.on("close", () => {
+    void serverContext.linkPreview.dispose();
     void serverContext.remoteMergePreparations.dispose();
   });
   return server;

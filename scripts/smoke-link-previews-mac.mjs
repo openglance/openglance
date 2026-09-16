@@ -6,13 +6,14 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServer } from "node:net";
+import { createGithubSmokeFixture } from "./link-preview-smoke-fixture.mjs";
 
 const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const root = mkdtempSync(path.join(tmpdir(), "openglance-preview-smoke-"));
 const fixture = path.join(realpathSync(root), "repo");
 const userData = path.join(root, "profile");
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-let child, childDone, exitCode, target, log = "";
+let child, childDone, exitCode, target, githubFixture, log = "";
 
 async function until(check, timeout = 20000) {
   const start = Date.now();
@@ -70,12 +71,13 @@ try {
   git(["add", "."]); git(["commit", "-m", "Fixture"]);
   const bin = path.join(root, "bin"); mkdirSync(bin);
   const gh = path.join(bin, "gh");
-  writeFileSync(gh, `#!${process.execPath}\nconst endpoint=process.argv.at(-1);\nif (!process.argv.includes("api")) { console.log("github.com: logged in for preview smoke"); process.exit(0); }\nif (endpoint.endsWith("/404")) { console.error("gh: Not Found (HTTP 404)"); process.exit(1); }\nif (endpoint.includes("/milestones/")) { console.log(JSON.stringify({title:"Next release",description:"Ship link previews for local documents and GitHub.",state:"open",due_on:"2026-09-30T23:59:59Z",open_issues:2,closed_issues:8})); process.exit(0); }\nconst slow=endpoint.endsWith("/43");\nsetTimeout(()=>console.log(JSON.stringify({title:slow?"Slow response":"Review link preview behavior",body:"Private GitHub issue content returned by the local gh fixture.\\n\\nCheck the hover card in both Preview and Live.",state:"open",user:{login:"preview-tester"},labels:[{name:"enhancement"}]})),slow?1800:80);\n`);
+  githubFixture = await createGithubSmokeFixture(root);
+  writeFileSync(gh, `#!${process.execPath}\nif (process.argv[2] === "auth" && process.argv[3] === "token") { const token=require("node:fs").readFileSync(${JSON.stringify(githubFixture.tokenFile)},"utf8"); if (!token) process.exit(1); console.log(token); } else { console.log("github.com: logged in for preview smoke"); }\n`);
   chmodSync(gh, 0o755);
   const portServer = createServer(); await new Promise((resolve) => portServer.listen(0, "127.0.0.1", resolve));
   const port = portServer.address().port; await new Promise((resolve) => portServer.close(resolve));
   console.log(`Preview smoke fixture: ${root}`);
-  child = spawn("make", ["smoke-dev-mac"], { cwd: repoRoot, env: { ...process.env,
+  child = spawn("make", ["smoke-dev-mac"], { cwd: repoRoot, env: { ...process.env, ...githubFixture.env,
     PATH: `${bin}${path.delimiter}${process.env.PATH}`, OPENGLANCE_SMOKE_USER_DATA_DIR: userData,
     OPENGLANCE_SMOKE_REPO_ROOT: fixture, OPENGLANCE_SMOKE_FILE: "README.md", OPENGLANCE_SMOKE_REMOTE_DEBUGGING_PORT: String(port),
   }, stdio: ["ignore", "pipe", "pipe"] });
@@ -94,6 +96,8 @@ try {
   assert.ok(processes.split("\n").some((line) => line.includes(path.join(userData, "Applications", "OpenGlance.app", "Contents", "MacOS", "OpenGlance")) && line.includes(`--openglance-dev-user-data-dir=${userData}`)), "Only the isolated App may be automated");
   await evaluate(`(() => { window.previewRequests=0; const f=window.fetch; window.fetch=(...a)=>{if(String(a[0]).includes('/api/link-preview')) window.previewRequests++; return f(...a);}; })()`);
   for (const mode of ["preview", "live"]) {
+    const account = `smoke-${mode}`;
+    writeFileSync(githubFixture.tokenFile, account);
     await click(`#mode-${mode}`);
     const link = mode === "preview" ? '#document-content a[href*="guide.md"]' : '[data-link-preview-href="guide.md"]';
     await until(() => evaluate(`!!document.querySelector(${JSON.stringify(link)})`));
@@ -115,11 +119,23 @@ try {
     await hover(section); await waitText("Rollout details stay scoped");
     assert.doesNotMatch(await previewText(), /Unrelated text/); await dismiss();
     const issue = mode === "preview" ? '#document-content a[href$="issues/42"]' : '[data-link-preview-href$="issues/42"]';
+    let started = performance.now();
     await hover(issue); await waitText("Private GitHub issue content");
+    const firstMs = Math.round(performance.now()-started);
+    const beforeRepeat = githubFixture.count("/42", account);
+    assert.equal(beforeRepeat, 1);
+    await dismiss(); started = performance.now();
+    await hover(issue); await waitText("Private GitHub issue content");
+    const repeatedMs = Math.round(performance.now()-started);
+    assert.equal(githubFixture.count("/42", account), beforeRepeat, "Repeated hover must not contact GitHub");
+    assert.ok(repeatedMs < firstMs - 600, `Cached hover should avoid the 1300ms response delay: ${firstMs}ms vs ${repeatedMs}ms`);
+    console.log(`${mode}: first=${firstMs}ms repeated=${repeatedMs}ms; repeated hover used no network request.`);
     await screenshot(`link-preview-github-${mode}.png`); await dismiss();
+    const connectionsBefore = githubFixture.connectionCount();
     const milestone = mode === "preview" ? '#document-content a[href$="milestone/7"]' : '[data-link-preview-href$="milestone/7"]';
     await hover(milestone); await waitText("Next release");
     assert.match(await previewText(), /Ship link previews for local documents and GitHub/);
+    assert.equal(githubFixture.connectionCount(), connectionsBefore, "A different GitHub link must reuse the TLS connection");
     assert.match(await previewText(), /2026-09-30/);
     assert.match(await previewText(), /8\/10.*80%/);
     assert.equal(await evaluate('document.querySelector("#link-preview .link-preview-open").href'), "https://github.com/exampleorg/preview-smoke/milestone/7");
@@ -128,9 +144,26 @@ try {
     await hover(missing); await until(async () => /does not have access|没有访问权限/.test(await previewText())); await dismiss();
     const slow = mode === "preview" ? '#document-content a[href$="issues/43"]' : '[data-link-preview-href$="issues/43"]';
     await hover(slow); await until(() => evaluate('!document.querySelector("#link-preview").hidden'));
-    await hover(link); await waitText("A short overview"); await delay(2200);
+    await until(() => githubFixture.count("/43", account) === 1);
+    await hover(link); await waitText("A short overview");
+    await dismiss(); // The local card overlaps the slow link; move away before re-entering it.
+    await hover(slow); await waitText("Slow response");
+    assert.equal(githubFixture.count("/43", account), 1, "Re-entering an in-flight preview must share its request");
+    await dismiss();
+    // A separate uncached request must not replace the local card after the pointer moves away.
+    await evaluate(`(() => { const e=document.querySelector(${JSON.stringify(slow)}); e.setAttribute(${JSON.stringify(mode === "preview" ? "href" : "data-link-preview-href")}, "https://github.com/exampleorg/preview-smoke/issues/44"); })()`);
+    await hover(slow.replace("/43", "/44"));
+    await until(() => githubFixture.count("/44", account) === 1);
+    await hover(link); await waitText("A short overview"); await delay(2400);
     assert.doesNotMatch(await previewText(), /Slow response/); await dismiss();
-    console.log(`${mode}: stationary hover, card retention, expand, section, gh milestone, denied access, stale responses and Escape passed.`);
+    // Invalidate the memory cache using a real CLI credential read, without touching a human login.
+    writeFileSync(githubFixture.tokenFile, "");
+    await hover(issue); await until(async () => /gh auth login/.test(await previewText())); await dismiss();
+    const switchedAccount = `${account}-switched`;
+    writeFileSync(githubFixture.tokenFile, switchedAccount);
+    await hover(issue); await waitText("Private GitHub issue content");
+    assert.equal(githubFixture.count("/42", switchedAccount), 1); await dismiss();
+    console.log(`${mode}: cache, shared in-flight request, TLS reuse, logout, account switch, stationary hover, card retention, expand, section, gh milestone, denied access, stale responses and Escape passed.`);
   }
   await click("#mode-preview");
   await evaluate('document.querySelector("#document-content a").focus()');
@@ -157,7 +190,9 @@ try {
     }
     await until(() => exitCode != null, 30000);
   }
-  if (childDone) assert.equal(await childDone, 0, "Profile verification and cleanup must succeed");
+  const launcherCode = childDone ? await childDone : 0;
+  await githubFixture?.dispose();
+  assert.equal(launcherCode, 0, "Profile verification and cleanup must succeed");
   rmSync(root, { recursive: true, force: true });
 }
 console.log("Link previews smoke passed; make smoke-dev-mac verified the real Profile.");

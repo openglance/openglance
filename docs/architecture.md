@@ -624,23 +624,38 @@ and line offsets share the document parser. Same-repository hosted links resolve
 worktree without selecting it; cross-repository links remain unavailable until opened. Shared links
 only preview a labeled local copy and cannot trigger fetch, sync, publication, or revision verification.
 
-The GitHub provider executes `gh api --hostname github.com --method GET` with fixed allowlisted route
-shapes, argument arrays, deadlines, output limits, and at most two concurrent preview operations. It
-inherits the user's current CLI authentication and never exports a token to the renderer. Slash-bearing
-file refs resolve against matching Git refs before reading Contents at the resolved SHA when the
-ref/path split could be ambiguous. Unambiguous file URLs use their explicit ref directly. GitHub file
-line anchors use original source lines; other anchors are explicitly labeled as resource excerpts.
-Milestone URLs (`/milestone/{number}`) read the dedicated Milestones endpoint. Structured status,
-UTC calendar due date, and open/closed Issue counts are formatted in the renderer locale; zero total
-counts show an empty state instead of a completion percentage.
-CLI errors map to bounded public states rather than exposing command stderr or private paths.
+The GitHub provider reads current credentials using `gh auth token --hostname github.com` on every
+hover request (simultaneous credential reads are coalesced). Tokens stay in the local service and never
+enter renderer responses, URLs, logs, or command arguments. A service-owned HTTP connection pool sends
+fixed GET routes to `https://api.github.com`, with one reusable connection, a 20-second API deadline,
+2 MiB response limits, and at most two distinct preview operations. It honors `HTTPS_PROXY`,
+`HTTP_PROXY`, and `NO_PROXY` (including lowercase variants). Same-origin API redirects support renamed
+repositories; credentials are never forwarded to another origin. The pool is destroyed when the service
+closes. No global dispatcher or unrelated network client is changed.
 
-GitHub payloads are neither persisted nor reused across hovers; the API sends `Cache-Control: no-store`.
-Dismissal removes card content, and each request uses current credentials. No AI service or public
-preview proxy participates. The regression suite covers path containment, worktree identity,
-authentication changes, endpoint boundaries, and source extraction. `make smoke-link-previews-mac`
-uses the isolated development App to exercise Preview and Live, stationary hover through multiple
-refresh cycles, keyboard dismissal, card retention, expansion, and asynchronous race handling.
+Successful GitHub cards use a bounded, 128-entry LRU memory cache for 60 seconds after completion.
+Each credential read is fingerprinted; an account switch or failed credential read clears the cache and
+cancels old in-flight requests. Identical pending previews share one operation, including when a browser
+fetch was cancelled on pointer exit. Late results from an invalidated account cannot return or populate
+the cache. HTTP 401, 403, or 404 clears retained content for the current credential context; failures are
+not cached. Expiry timers remove entries even without another hover. Cache hits still check local
+credentials, but cannot detect server-side permission changes until another API read: content and
+Milestone progress may be up to 60 seconds old. Private content and credentials are never persisted.
+
+Slash-bearing file refs resolve against matching Git refs before reading Contents at the resolved SHA
+when the ref/path split could be ambiguous. Unambiguous file URLs use their explicit ref directly.
+GitHub file line anchors use original source lines; other anchors are explicitly labeled as resource
+excerpts. Milestone URLs (`/milestone/{number}`) read the dedicated Milestones endpoint. Structured
+status, UTC calendar due date, and open/closed Issue counts are formatted in the renderer locale; zero
+total counts show an empty state instead of a completion percentage. Errors map to bounded public
+states rather than exposing command stderr, response bodies, credentials, or private paths.
+
+The browser API still sends `Cache-Control: no-store`; dismissal removes card content. No AI service or
+public preview proxy participates. The regression suite covers path containment, worktree identity,
+authentication changes, expiry/eviction, request coalescing, endpoint boundaries, and source extraction.
+`make smoke-link-previews-mac` uses the isolated development App and a loopback TLS fixture to exercise
+Preview and Live, stationary hover through multiple refresh cycles, keyboard dismissal, card retention,
+expansion, asynchronous race handling, cached-hover latency, connection reuse, and credential changes.
 
 ## Deep links and hosted handoff
 

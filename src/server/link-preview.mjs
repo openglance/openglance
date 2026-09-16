@@ -1,47 +1,85 @@
 import { readFile, stat } from "node:fs/promises";
-import { homedir } from "node:os";
-import path from "node:path";
+import { createHash } from "node:crypto";
 import { linkPreviewTarget } from "../../public/link-preview-target.js";
 import { markdownLinkPreview } from "../content/markdown.mjs";
-import { runExternalCommand } from "./external-command.mjs";
+import { createGithubPreviewTransport } from "./github-preview-transport.mjs";
 import { resolvePreviewPath } from "./paths.mjs";
 import { listGitWorktrees } from "./git-worktrees.mjs";
 
 const MAX_BYTES = 1024 * 1024;
+const CACHE_TTL_MS = 60000;
+const CACHE_LIMIT = 128;
 
-// Private content is never cached or written to disk. Each hover uses current gh credentials.
-export function createLinkPreviewProvider({ ghRunner = runExternalCommand } = {}) {
-  let active = 0;
-  return async ({ href, file, repo, origin }) => {
+// Only successful previews are retained, in memory, for 60 seconds from completion.
+export function createLinkPreviewProvider({ ghRunner, githubTransport = createGithubPreviewTransport({ ghRunner }), now = Date.now } = {}) {
+  let state = null, credentials = null, disposed = false;
+  function invalidate() {
+    if (!state) return;
+    for (const entry of state.cache.values()) clearTimeout(entry.timer);
+    for (const entry of state.pending.values()) entry.controller.abort();
+    state.cache.clear(); state.pending.clear(); state = null;
+  }
+  function currentToken() {
+    // Coalesce simultaneous local keychain reads, but never reuse a completed credential read.
+    credentials ||= Promise.resolve().then(() => githubTransport.readToken()).finally(() => { credentials = null; });
+    return credentials;
+  }
+  const preview = async ({ href, file, repo, origin }) => {
     const target = linkPreviewTarget(href, { file, repo: repo.id, origin });
     if (!target) return { status: "unsupported" };
     if (target.kind !== "github") return localPreview(target, repo);
-    if (active >= 2) return { status: "busy", kind: "github" };
-    active++;
+    if (disposed) return { status: "unavailable", kind: "github" };
+    let token;
     try {
-      const deadline = Date.now() + 20000;
-      const api = async (endpoint) => {
-        const args = ["api", "--hostname", "github.com", "--method", "GET", "-H", "Accept: application/vnd.github+json", endpoint];
-        const commands = process.platform === "win32" ? ["gh"] : ["gh", "/opt/homebrew/bin/gh", "/usr/local/bin/gh", path.join(homedir(), ".local/bin/gh")];
-        for (let index = 0; index < commands.length; index++) {
-          if (Date.now() >= deadline) throw new Error("Preview timed out");
-          try {
-            const { stdout } = await ghRunner(commands[index], args, {
-              timeout: Math.max(1, deadline - Date.now()), maxBuffer: MAX_BYTES * 2,
-              env: { ...process.env, GH_PROMPT_DISABLED: "1", GH_PAGER: "cat" },
-            });
-            return JSON.parse(stdout);
-          } catch (error) {
-            if (error.code === "ENOENT" && index < commands.length - 1) continue;
-            throw error;
-          }
-        }
-      };
-      return { kind: "github", ...await githubPreview(target, api) };
+      token = await currentToken();
     } catch (error) {
+      invalidate();
       return { kind: "github", status: githubErrorStatus(error) };
-    } finally { active--; }
+    }
+    if (disposed) return { status: "unavailable", kind: "github" };
+    const fingerprint = createHash("sha256").update(token).digest("hex");
+    if (state?.fingerprint !== fingerprint) {
+      invalidate();
+      state = { fingerprint, cache: new Map(), pending: new Map() };
+    }
+    const account = state;
+    const key = target.url;
+    const cached = account.cache.get(key);
+    if (cached) {
+      account.cache.delete(key);
+      if (cached.expires > now()) { account.cache.set(key, cached); return cached.value; }
+      clearTimeout(cached.timer);
+    }
+    if (account.pending.has(key)) return account.pending.get(key).promise;
+    if (account.pending.size >= 2) return { status: "busy", kind: "github" };
+    const controller = new AbortController();
+    const deadline = Date.now() + 20000;
+    const promise = (async () => {
+      try {
+        const value = { kind: "github", ...await githubPreview(target, (endpoint) => githubTransport.api(endpoint, { token, signal: controller.signal, deadline })) };
+        if (state !== account) return { kind: "github", status: "authentication_required" };
+        if (value.status === "ok") {
+          if (account.cache.size >= CACHE_LIMIT) {
+            const oldest = account.cache.keys().next().value;
+            clearTimeout(account.cache.get(oldest).timer); account.cache.delete(oldest);
+          }
+          const timer = setTimeout(() => account.cache.delete(key), CACHE_TTL_MS);
+          timer.unref();
+          account.cache.set(key, { value, expires: now() + CACHE_TTL_MS, timer });
+        }
+        return value;
+      } catch (error) {
+        if (state !== account) return { kind: "github", status: "authentication_required" };
+        const status = githubErrorStatus(error);
+        if (["authentication_required", "forbidden", "unavailable"].includes(status) || [401, 403, 404].includes(error.statusCode)) invalidate();
+        return { kind: "github", status };
+      } finally { account.pending.delete(key); }
+    })();
+    account.pending.set(key, { promise, controller });
+    return promise;
   };
+  preview.dispose = async () => { disposed = true; invalidate(); await githubTransport.dispose?.(); };
+  return preview;
 }
 
 async function localPreview(target, repo) {
@@ -144,6 +182,6 @@ function githubErrorStatus(error) {
   if (/rate limit|HTTP 429/i.test(output)) return "rate_limited";
   if (/HTTP 403/i.test(output)) return "forbidden";
   if (/HTTP 404/i.test(output)) return "unavailable";
-  if (error.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER") return "too_large";
+  if (["ERR_CHILD_PROCESS_STDIO_MAXBUFFER", "PREVIEW_TOO_LARGE", "UND_ERR_RES_EXCEEDED_MAX_SIZE"].includes(error.code)) return "too_large";
   return "network_error";
 }

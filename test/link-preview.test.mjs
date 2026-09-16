@@ -92,27 +92,34 @@ test("hosted links preview their primary or exact worktree without switching or 
   assert.equal(execFileSync("git", ["branch", "--show-current"], { cwd: repoRoot, encoding: "utf8" }).trim(), "main");
 });
 
-function githubProvider(responses, calls = []) {
-  return createLinkPreviewProvider({ ghRunner: async (command, args, options) => {
-    calls.push({ command, args, options });
-    const response = responses[args.at(-1)];
-    if (response instanceof Error) throw response;
-    assert.notEqual(response, undefined, `Unexpected endpoint ${args.at(-1)}`);
-    return { stdout: JSON.stringify(response) };
-  } });
+function githubProvider(responses, calls = [], options = {}) {
+  return createLinkPreviewProvider({ githubTransport: {
+    readToken: async () => "test-account",
+    api: async (endpoint, options) => {
+      calls.push({ endpoint, options });
+      const response = responses[endpoint];
+      if (response instanceof Error) throw response;
+      assert.notEqual(response, undefined, `Unexpected endpoint ${endpoint}`);
+      return response;
+    },
+  }, ...options });
 }
 const request = (suffix = "") => ({ href: github + suffix, file: "README.md", repo: { id: "local" }, origin: context.origin });
 
-test("GitHub reads use fixed authenticated GET endpoints and never retain account content", async () => {
-  const calls = [];
+test("GitHub previews reuse a successful result for 60 seconds, then read fresh content", async (t) => {
+  const calls = []; let time = 100;
   const responses = { "repos/example/private/issues/42": { title: "Private issue", body: "Actual issue content.", state: "open", user: { login: "author" }, labels: [{ name: "bug" }] } };
-  const preview = githubProvider(responses, calls);
+  const preview = githubProvider(responses, calls, { now: () => time });
+  t.after(() => preview.dispose());
   const first = await preview(request("/issues/42"));
   assert.equal(first.title, "#42 Private issue");
   assert.deepEqual(first.metadata, ["open", "author", "bug"]);
-  assert.deepEqual(calls[0].args.slice(0, 5), ["api", "--hostname", "github.com", "--method", "GET"]);
-  assert.ok(calls[0].options.timeout <= 20000);
+  assert.equal(calls[0].endpoint, "repos/example/private/issues/42");
   responses["repos/example/private/issues/42"] = new Error("HTTP 404 hidden private error");
+  time += 59999;
+  assert.deepEqual(await preview(request("/issues/42")), first);
+  assert.equal(calls.length, 1);
+  time++;
   assert.deepEqual(await preview(request("/issues/42")), { kind: "github", status: "unavailable" });
   assert.equal(calls.length, 2);
 });
@@ -138,7 +145,7 @@ test("GitHub failures become safe actionable states without exposing command out
     [new Error("HTTP 403 API rate limit exceeded"), "rate_limited"],
     [new Error("timeout with private URL"), "network_error"],
   ]) {
-    const preview = createLinkPreviewProvider({ ghRunner: async () => { throw error; } });
+    const preview = createLinkPreviewProvider({ githubTransport: { readToken: async () => "account", api: async () => { throw error; } } });
     assert.deepEqual(await preview(request()), { kind: "github", status });
   }
 });
@@ -157,7 +164,7 @@ test("milestone links show their description, status, UTC due date and issue pro
   assert.deepEqual(milestonePreviewMetadata(result.milestone, "en"), ["Open", "Due 2026-09-30", "Closed 8/10 (80%) · 2 open"]);
   assert.deepEqual(milestonePreviewMetadata(result.milestone, "zh-CN"), ["进行中", "截止 2026-09-30", "已关闭 8/10（80%） · 2 未关闭"]);
   assert.equal(calls.length, 1);
-  assert.deepEqual(calls[0].args.slice(0, 5), ["api", "--hostname", "github.com", "--method", "GET"]);
+  assert.equal(calls[0].endpoint, "repos/example/private/milestones/7");
   for (const suffix of ["/milestone/0", "/milestone/-1", "/milestone/name", "/milestone/7/edit", "/milestones"]) {
     assert.equal(linkPreviewTarget(github + suffix, context), null, suffix);
   }
@@ -201,40 +208,115 @@ test("unambiguous GitHub file URLs need one request and unknown anchors remain l
   responses["repos/example/private/contents/README.md?ref=main"].content = "";
   assert.equal((await preview(request("/blob/main/README.md"))).status, "ok");
   responses["repos/example/private/contents/README.md?ref=main"].content = Buffer.from([0, 255]).toString("base64");
-  assert.equal((await preview(request("/blob/main/README.md"))).status, "unsupported");
+  assert.equal((await preview(request("/blob/main/README.md#L1"))).status, "unsupported");
 });
 
-test("bounded GitHub concurrency recovers after pending operations complete", async () => {
+test("identical pending previews coalesce and distinct previews retain a bounded concurrency limit", async (t) => {
   const pending = [];
-  const preview = createLinkPreviewProvider({ ghRunner: () => new Promise((resolve) => pending.push(resolve)) });
-  const first = preview(request()); const second = preview(request());
-  assert.equal((await preview(request())).status, "busy");
-  for (const resolve of pending) resolve({ stdout: '{"full_name":"example/private"}' });
+  const preview = createLinkPreviewProvider({ githubTransport: { readToken: async () => "account", api: () => new Promise((resolve) => pending.push(resolve)) } });
+  t.after(() => preview.dispose());
+  const first = preview(request()); const repeated = preview(request()); const second = preview(request("/issues/1"));
+  assert.equal((await preview(request("/issues/2"))).status, "busy");
+  assert.equal(pending.length, 2);
+  for (const resolve of pending) resolve({ full_name: "example/private", title: "Issue" });
   assert.equal((await first).status, "ok"); assert.equal((await second).status, "ok");
-  const next = preview(request());
-  pending.at(-1)({ stdout: '{"full_name":"example/private"}' });
+  assert.deepEqual(await repeated, await first);
+  const next = preview(request("/issues/2"));
+  await new Promise((resolve) => setImmediate(resolve));
+  pending.at(-1)({ title: "Next" });
   assert.equal((await next).status, "ok");
 });
 
-test("a failed ref lookup retains its concurrency slot until the other lookup settles", async () => {
+test("a failed ref lookup retains its concurrency slot until the other lookup settles", async (t) => {
   const pending = [];
-  const preview = createLinkPreviewProvider({ ghRunner: async (_command, args) => {
-    if (args.at(-1).includes("/tags/")) throw new Error("HTTP 403");
+  const preview = createLinkPreviewProvider({ githubTransport: { readToken: async () => "account", api: async (endpoint) => {
+    if (endpoint.includes("/tags/")) throw new Error("HTTP 403");
     return new Promise((resolve) => pending.push(resolve));
-  } });
+  } } });
+  t.after(() => preview.dispose());
   const first = preview(request("/blob/feature/topic/a.md"));
-  const second = preview(request("/blob/feature/topic/a.md"));
+  const second = preview(request("/blob/feature/topic/b.md"));
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal((await preview(request())).status, "busy");
-  for (const resolve of pending) resolve({ stdout: "[]" });
+  for (const resolve of pending) resolve([]);
   assert.equal((await first).status, "forbidden");
-  assert.equal((await second).status, "forbidden");
+  assert.equal((await second).status, "authentication_required");
+});
+
+test("account changes and logout clear cached previews and prevent old pending results from returning", async (t) => {
+  let token = "account-A", reads = 0, calls = 0, finish;
+  const preview = createLinkPreviewProvider({ githubTransport: {
+    readToken: async () => { reads++; if (!token) throw new Error("gh auth login"); return token; },
+    api: async (endpoint, { token: current }) => { calls++; return endpoint.endsWith("/9") ? new Promise((resolve) => { finish = resolve; }) : { full_name: current }; },
+  } });
+  t.after(() => preview.dispose());
+  assert.equal((await preview(request())).title, "account-A");
+  assert.equal((await preview(request())).title, "account-A");
+  assert.equal(reads, 2); assert.equal(calls, 1);
+  const old = preview(request("/issues/9"));
+  await new Promise((resolve) => setImmediate(resolve));
+  token = "account-B";
+  assert.equal((await preview(request())).title, "account-B");
+  finish({ title: "Secret from A" });
+  assert.equal((await old).status, "authentication_required");
+  token = "";
+  assert.equal((await preview(request())).status, "authentication_required");
+  token = "account-A";
+  assert.equal((await preview(request())).title, "account-A");
+  assert.equal(calls, 4);
+});
+
+test("access failures evict previously cached content and failed requests are retryable", async (t) => {
+  for (const statusCode of [401, 403, 404]) {
+    let count = 0, denied = true;
+    const preview = createLinkPreviewProvider({ githubTransport: {
+      readToken: async () => "account",
+      api: async (endpoint) => { count++; if (endpoint.endsWith("/1") && denied) throw Object.assign(new Error(`HTTP ${statusCode}`), { statusCode }); return { full_name: "Repo", title: "Issue" }; },
+    } });
+    t.after(() => preview.dispose());
+    await preview(request()); await preview(request("/issues/1"));
+    denied = false;
+    await preview(request()); await preview(request("/issues/1"));
+    assert.equal(count, 4);
+  }
+});
+
+test("the memory cache is bounded and recently used previews survive eviction", async (t) => {
+  let count = 0;
+  const preview = createLinkPreviewProvider({ githubTransport: { readToken: async () => "account", api: async () => { count++; return { title: "Issue" }; } } });
+  t.after(() => preview.dispose());
+  for (let i = 1; i <= 128; i++) await preview(request(`/issues/${i}`));
+  await preview(request("/issues/1")); await preview(request("/issues/129"));
+  await preview(request("/issues/1")); assert.equal(count, 129);
+  await preview(request("/issues/2")); assert.equal(count, 130);
+});
+
+test("closing the service cancels pending reads and prevents credential reads or cached replies", async () => {
+  let finish, signal, credentialReads = 0, disposed = false;
+  const preview = createLinkPreviewProvider({ githubTransport: {
+    readToken: async () => { credentialReads++; return "account"; },
+    api: async (endpoint, options) => {
+      if (!endpoint.endsWith("/1")) return { full_name: "Repo" };
+      signal = options.signal;
+      return new Promise((resolve) => { finish = resolve; });
+    },
+    dispose: async () => { disposed = true; },
+  } });
+  await preview(request());
+  const pending = preview(request("/issues/1"));
+  await new Promise((resolve) => setImmediate(resolve));
+  await preview.dispose();
+  assert.equal(disposed, true); assert.equal(signal.aborted, true);
+  finish({ title: "Old result" });
+  assert.equal((await pending).status, "authentication_required");
+  assert.equal((await preview(request())).status, "unavailable");
+  assert.equal(credentialReads, 2);
 });
 
 test("preview API rejects cross-origin access and mutation while disabling response caching", async (t) => {
   const { repoRoot } = await fixture(t);
   let calls = 0;
-  const server = createPreviewServer({ repoRoot, initialFile: null, ghRunner: async () => { calls++; return { stdout: '{"full_name":"example/private","private":true}' }; } });
+  const server = createPreviewServer({ repoRoot, initialFile: null, githubTransport: { readToken: async () => "account", api: async () => { calls++; return { full_name: "example/private", private: true }; } } });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   t.after(() => new Promise((resolve) => server.close(resolve)));
   const url = `http://127.0.0.1:${server.address().port}/api/link-preview?href=${encodeURIComponent(github)}`;
