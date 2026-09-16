@@ -175,7 +175,7 @@ JSX, JavaScript, imports, or scripts.
 - Hover previews in Preview and Live for local Markdown/MDX links and GitHub repositories, issues,
   pull requests, milestones, files, commits, and releases. Local links show saved summaries, sections, or source
   lines; GitHub previews use the local `gh` login, including its private-repository permissions.
-  Connections are reused and successful GitHub previews stay in memory for up to 60 seconds to speed up
+  Different GitHub URLs share a connection; successful previews stay in memory for up to 60 seconds to speed up
   repeated hovers; switching the `gh` login clears retained content. Read more, open the target, or dismiss
   with Escape without leaving the current document.
 - All, Favorites, and Sync views, with a content-focused tree or the complete repository tree. Markdown

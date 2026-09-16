@@ -39,7 +39,7 @@ async function cdp(method, params = {}) {
 }
 const evaluate = async (expression) => (await cdp("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true })).result.value;
 async function point(selector) {
-  return evaluate(`(() => { const e=document.querySelector(${JSON.stringify(selector)}); e.scrollIntoView({block:"nearest"}); const r=e.getBoundingClientRect(); return {x:r.x+r.width/2,y:r.y+r.height/2}; })()`);
+  return evaluate(`(() => { const e=document.querySelector(${JSON.stringify(selector)}); e.scrollIntoView({block:"center"}); const r=e.getClientRects()[0]; return {x:r.x+r.width/2,y:r.y+r.height/2}; })()`);
 }
 async function hover(selector) { await cdp("Input.dispatchMouseEvent", { type: "mouseMoved", ...await point(selector) }); }
 async function click(selector) {
@@ -68,10 +68,13 @@ try {
   writeFileSync(path.join(fixture, "README.md"), "# Link previews\n\nHover over a link to read without leaving this document.\n\n[Document overview](guide.md) · [Specific section](guide.md#rollout) · [Source lines](guide.md#L7-L9)\n\n[GitHub issue](https://github.com/exampleorg/preview-smoke/issues/42) · [Missing issue](https://github.com/exampleorg/preview-smoke/issues/404)\n\n[Slow issue](https://github.com/exampleorg/preview-smoke/issues/43) · [Milestone](https://github.com/exampleorg/preview-smoke/milestone/7)\n");
   const guide = "---\ntitle: Release guide\ndescription: A short overview of the release workflow, with a checklist for the next rollout.\n---\n# Release guide\n\nRead the checklist before publishing.\n\n## Rollout\n\nRollout details stay scoped to this section.\n\n" + "Verify the build, document the change and check the deployment.\n\n".repeat(10) + "## Next section\n\nUnrelated text.\n";
   writeFileSync(path.join(fixture, "guide.md"), guide);
+  const files = ["a", "b", "c"].map((file) => `[Remote file ${file}](https://github.com/exampleorg/preview-smoke/blob/main/docs/${file}.md)`).join(" · ");
+  writeFileSync(path.join(fixture, "README.md"), `\n${files}\n`, { flag: "a" });
   git(["add", "."]); git(["commit", "-m", "Fixture"]);
   const bin = path.join(root, "bin"); mkdirSync(bin);
   const gh = path.join(bin, "gh");
-  githubFixture = await createGithubSmokeFixture(root);
+  const http2 = process.env.OPENGLANCE_SMOKE_GITHUB_HTTP1 !== "1";
+  githubFixture = await createGithubSmokeFixture(root, { http2 });
   writeFileSync(gh, `#!${process.execPath}\nif (process.argv[2] === "auth" && process.argv[3] === "token") { const token=require("node:fs").readFileSync(${JSON.stringify(githubFixture.tokenFile)},"utf8"); if (!token) process.exit(1); console.log(token); } else { console.log("github.com: logged in for preview smoke"); }\n`);
   chmodSync(gh, 0o755);
   const portServer = createServer(); await new Promise((resolve) => portServer.listen(0, "127.0.0.1", resolve));
@@ -140,6 +143,21 @@ try {
     assert.match(await previewText(), /8\/10.*80%/);
     assert.equal(await evaluate('document.querySelector("#link-preview .link-preview-open").href'), "https://github.com/exampleorg/preview-smoke/milestone/7");
     await screenshot(`link-preview-milestone-${mode}.png`); await dismiss();
+    // Different uncached files must reuse the connection, including after a deliberate idle gap.
+    for (const file of ["a", "b", "c"]) {
+      if (file === "b") await delay(12000);
+      const fileLink = mode === "preview" ? `#document-content a[href$="docs/${file}.md"]` : `[data-link-preview-href$="docs/${file}.md"]`;
+      const before = githubFixture.requests.length;
+      started = performance.now();
+      await hover(fileLink); await waitText(`Uncached file ${file} content.`);
+      const calls = githubFixture.requests.slice(before);
+      assert.equal(calls.length, 3, "Each new file must read heads, tags and fresh content");
+      assert.ok(calls.every((item) => item.protocol === (http2 ? "2.0" : "1.1")), `Unexpected API protocols: ${calls.map((item) => item.protocol).join(", ")}`);
+      assert.equal(githubFixture.connectionCount(), connectionsBefore, "Different files must reuse the TLS connection after idle");
+      console.log(`${mode}: uncached file ${file}=${Math.round(performance.now()-started)}ms; ${calls.length} API reads on the existing ${http2 ? "HTTP/2" : "HTTP/1.1"} connection.`);
+      await dismiss();
+    }
+    if (http2) assert.ok(githubFixture.maxConcurrentRefs() >= 2, "Heads and tags must use concurrent streams on the same connection");
     const missing = mode === "preview" ? '#document-content a[href$="issues/404"]' : '[data-link-preview-href$="issues/404"]';
     await hover(missing); await until(async () => /does not have access|没有访问权限/.test(await previewText())); await dismiss();
     const slow = mode === "preview" ? '#document-content a[href$="issues/43"]' : '[data-link-preview-href$="issues/43"]';

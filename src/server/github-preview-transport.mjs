@@ -31,8 +31,10 @@ export function createGithubPreviewTransport({ ghRunner = runExternalCommand, di
     async api(endpoint, { token, signal, deadline }) {
       let url = new URL(endpoint, `${API_ORIGIN}/`);
       if (!endpoint.startsWith("repos/") || !url.pathname.startsWith("/repos/") || url.origin !== API_ORIGIN || url.hash || url.username || url.password) throw new Error("Unsupported API route");
-      pool ||= new EnvHttpProxyAgent({ connections: 1, pipelining: 1, keepAliveTimeout: 60000, keepAliveMaxTimeout: 60000,
-        connect: { timeout: 10000 }, maxResponseSize: MAX_BYTES });
+      // Two file previews can each resolve heads and tags. Let these GETs share concurrent H2 streams.
+      // H1 fallback retains ordered responses and the default blocking-until-headers behavior.
+      pool ||= new EnvHttpProxyAgent({ connections: 1, allowH2: true, pipelining: 4, keepAliveTimeout: 60000, keepAliveMaxTimeout: 60000,
+        connect: { timeout: 10000 }, requestTls: { allowH2: true, timeout: 10000 }, maxResponseSize: MAX_BYTES });
       const timeout = AbortSignal.timeout(Math.max(1, deadline - Date.now()));
       const requestSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
       for (let redirects = 0; redirects <= 3; redirects++) {

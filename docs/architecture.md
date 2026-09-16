@@ -627,11 +627,17 @@ only preview a labeled local copy and cannot trigger fetch, sync, publication, o
 The GitHub provider reads current credentials using `gh auth token --hostname github.com` on every
 hover request (simultaneous credential reads are coalesced). Tokens stay in the local service and never
 enter renderer responses, URLs, logs, or command arguments. A service-owned HTTP connection pool sends
-fixed GET routes to `https://api.github.com`, with one reusable connection, a 20-second API deadline,
-2 MiB response limits, and at most two distinct preview operations. It honors `HTTPS_PROXY`,
+fixed GET routes to `https://api.github.com`, with one reusable connection across different resource
+URLs, a 20-second API deadline, 2 MiB response limits, and at most two distinct preview operations.
+It honors `HTTPS_PROXY`,
 `HTTP_PROXY`, and `NO_PROXY` (including lowercase variants). Same-origin API redirects support renamed
 repositories; credentials are never forwarded to another origin. The pool is destroyed when the service
 closes. No global dispatcher or unrelated network client is changed.
+
+HTTP/2 is negotiated when available, with up to four concurrent GET streams on the same connection;
+file branch and tag resolution can therefore run together. HTTP/1.1 remains the fallback with ordered
+responses. Reusing a connection avoids repeated connection setup but does not remove API round trips
+or the first connection's network latency; it is independent of the content cache below.
 
 Successful GitHub cards use a bounded, 128-entry LRU memory cache for 60 seconds after completion.
 Each credential read is fingerprinted; an account switch or failed credential read clears the cache and
@@ -655,7 +661,8 @@ public preview proxy participates. The regression suite covers path containment,
 authentication changes, expiry/eviction, request coalescing, endpoint boundaries, and source extraction.
 `make smoke-link-previews-mac` uses the isolated development App and a loopback TLS fixture to exercise
 Preview and Live, stationary hover through multiple refresh cycles, keyboard dismissal, card retention,
-expansion, asynchronous race handling, cached-hover latency, connection reuse, and credential changes.
+expansion, asynchronous race handling, cached-hover latency, reuse across uncached file URLs after idle,
+concurrent HTTP/2 ref reads, HTTP/1.1 fallback, and credential changes.
 
 ## Deep links and hosted handoff
 

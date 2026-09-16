@@ -146,7 +146,9 @@ milestone shows no percentage. File line anchors are supported. Other GitHub anc
 resource excerpt; comments and diffs are not fetched. An unavailable preview leaves the original link
 usable and explains missing login, denied access, or network errors.
 
-GitHub requests reuse connections. Successful previews stay in memory for up to 60 seconds, so repeated
+Different GitHub URLs reuse the same connection, avoiding repeated connection setup. File previews
+can run branch and tag lookups concurrently over HTTP/2 when available. The first connection and each
+API read still take network time. Successful previews stay in memory for up to 60 seconds, so repeated
 hovers are faster; simultaneous requests for the same link share a single read. Status and Milestone
 progress can therefore be up to one minute old. Each hover checks current local `gh` credentials;
 switching accounts or logging out clears retained content. A server-side permission change is detected
