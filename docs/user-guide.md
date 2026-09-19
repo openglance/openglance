@@ -443,6 +443,10 @@ node "$(git rev-parse --show-toplevel)/tools/generate-openglance-open-link.mjs" 
 Use the returned HTTPS URL exactly in a Markdown link:
 `Open in OpenGlance: [<document title>](<returned HTTPS URL>)`
 
+The generator includes the document title for external previews such as Codex. The title is visible
+to recipients and preview services; use `--no-preview-title` for sensitive titles. Document bodies
+and AI summaries are not transmitted.
+
 Do not return only a local absolute path, and do not handcraft `/open`, `/share`, or `openglance://`
 URLs. `/open` is for local navigation and preview; it does not prove the file is published. For a link
 sent to another person, first publish the document to `main`, then use OpenGlance's Copy share link.

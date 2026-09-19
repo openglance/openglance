@@ -290,6 +290,9 @@ normative contract is the [usage analytics specification](docs/app-usage-analyti
 - The public `/open` and `/share` pages are Mango Future-hosted handoff services. They receive repository
   identifiers and document metadata, but never Git credentials or document content. See
   [Hosted link metadata and privacy](docs/hosted-links.md).
+- HTTPS document links supply titles, repository paths, and a small icon to preview-capable clients
+  such as Codex. Generators include the document title by default; `--no-preview-title` omits it.
+  Previews do not transmit document bodies or AI summaries.
 
 ## Development
 

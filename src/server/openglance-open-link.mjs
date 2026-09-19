@@ -3,6 +3,7 @@ import { isExternalCommandExit, runExternalCommand } from "./external-command.mj
 import { listGitWorktrees } from "./git-worktrees.mjs";
 import { extractTitle } from "../content/markdown.mjs";
 import { githubRepositoryIdentityFromRemote } from "./repositories.mjs";
+import { readOpenLinkPreviewTitle } from "./open-link-preview-title.mjs";
 
 const OPENGLANCE_OPEN_LINK_MESSAGES = Object.freeze({
   en: Object.freeze({
@@ -38,6 +39,7 @@ export async function createOpenGlanceOpenLink({
   locale,
   readOrigin = defaultReadOrigin,
   listWorktrees = listGitWorktrees,
+  previewTitle = true,
 } = {}) {
   const translate = createOpenLinkTranslator(locale ?? language);
   if (!repoRoot) {
@@ -55,10 +57,18 @@ export async function createOpenGlanceOpenLink({
     throw new Error(translate("open.currentWorktreeRequired"));
   }
 
-  return openGlanceHttpsOpenUrl({
+  const link = openGlanceHttpsOpenUrl({
     repository,
     file,
     ...(currentWorktree.primary ? {} : { worktree: currentWorktree.id }),
+  });
+  const url = new URL(link);
+  if (!previewTitle || !url.searchParams.has("path")) return link;
+  return openGlanceHttpsOpenUrl({
+    repository,
+    file: url.searchParams.get("path"),
+    worktree: url.searchParams.get("worktree") || "",
+    title: await readOpenLinkPreviewTitle(repoRoot, url.searchParams.get("path")),
   });
 }
 

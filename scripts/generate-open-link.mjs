@@ -17,6 +17,8 @@ function parseArguments(args) {
       index += 1;
     } else if (arg.startsWith("--file=")) {
       options.file = arg.slice("--file=".length);
+    } else if (arg === "--no-preview-title") {
+      options.previewTitle = false;
     } else if (["--help", "-h"].includes(arg)) {
       options.help = true;
     } else {
@@ -30,7 +32,8 @@ function printHelp() {
   console.log(`Usage: node scripts/generate-open-link.mjs --file <repo-relative.md> [--repo-root <path>]
 
 Creates a portable repository link from the primary worktree, or a local-exact link containing
-the worktree id when the selected repository root is a linked worktree.`);
+the worktree id when the selected repository root is a linked worktree.
+Includes the document title for external previews. Use --no-preview-title to omit it.`);
 }
 
 async function main() {
@@ -43,7 +46,7 @@ async function main() {
     throw new Error("--file is required.");
   }
   const repoRoot = await findRepoRoot(options.repoRoot);
-  console.log(await createOpenGlanceOpenLink({ repoRoot, file: options.file }));
+  console.log(await createOpenGlanceOpenLink({ ...options, repoRoot }));
 }
 
 main().catch((error) => {

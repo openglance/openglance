@@ -696,7 +696,11 @@ missing, and never silently falls back to another worktree.
 The HTTPS `/open` and `/share` endpoints are Mango Future hosted handoff services. They convert safe URL
 metadata into a local protocol launch and maintain a random, in-memory handoff state for up to ten
 minutes. They do not fetch a Git repository or document body. The exact transmitted metadata and normal
-HTTP exposure are documented in [Hosted link handoff](hosted-links.md).
+HTTP exposure are documented in [Hosted link handoff](hosted-links.md). Ordinary link generators add
+an optional bounded document title (frontmatter title, then H1), with `--no-preview-title` for omission.
+They read at most 64 KiB inside the selected repository and never transmit content summaries.
+Hosted responses provide HTML/Open Graph text metadata and a small icon; external clients own card
+rendering and caching. Display metadata never enters the desktop protocol's navigation parameters.
 
 During the installed-client migration, the hosted service emits the equivalent `git-leaf://` handoff
 because that compatibility scheme is registered by both Git Leaf 1.x and OpenGlance.

@@ -5,7 +5,7 @@ export const OPENGLANCE_HTTPS_SHARE_URL = "https://gitleaf.mangofuture.com/share
 export const OPENGLANCE_SHARE_VERSION = "1";
 export const OPENGLANCE_SHARE_TITLE_MAX_LENGTH = 100;
 
-export function openGlanceHttpsOpenUrl({ repository, file = "", worktree = "" } = {}) {
+export function openGlanceHttpsOpenUrl({ repository, file = "", worktree = "", title = "" } = {}) {
   const normalized = normalizeOpenGlanceLinkTarget({ repository, file, worktree });
   if (!normalized?.repository) {
     throw new Error("OpenGlance HTTPS links require a GitHub repository identity.");
@@ -19,6 +19,8 @@ export function openGlanceHttpsOpenUrl({ repository, file = "", worktree = "" } 
   if (normalized.worktree) {
     url.searchParams.set("worktree", normalized.worktree);
   }
+  const previewTitle = normalizeSharePreviewText(title, OPENGLANCE_SHARE_TITLE_MAX_LENGTH);
+  if (normalized.file && previewTitle) url.searchParams.set("title", previewTitle);
   return url.toString();
 }
 
@@ -117,7 +119,7 @@ function normalizeRepositoryIdentity(value) {
 }
 
 function normalizeSharePreviewText(value, maxLength) {
-  const normalized = String(value ?? "").replace(/\s+/g, " ").trim();
+  const normalized = String(value ?? "").replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim();
   if (normalized.length <= maxLength) {
     return normalized;
   }

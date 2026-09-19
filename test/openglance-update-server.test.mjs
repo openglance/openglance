@@ -804,7 +804,7 @@ test("OpenGlance update server renders a safe optional document deep link", asyn
       html,
       /git-leaf:\/\/open-worktree\?repo=exampleorg%2Fcompany-docs&amp;path=company%2Fstrategy\.md&amp;worktree=0123456789abcdef&amp;handoff=[A-Za-z0-9_-]+/,
     );
-    assert.match(html, /正在 OpenGlance 中打开文档/);
+    assert.match(html, /<title>strategy.md<\/title>/);
     assert.match(html, /exampleorg\/company-docs · company\/strategy\.md/);
     assert.match(html, /在 OpenGlance 中打开/);
     assert.match(html, /window\.close\(\)/);
@@ -813,8 +813,30 @@ test("OpenGlance update server renders a safe optional document deep link", asyn
     assert.doesNotMatch(html, /window\.setTimeout\(attemptClose/);
     assert.doesNotMatch(html, /scheduleClose\(\);window\.location\.href/);
     assert.doesNotMatch(html, /lk_jump_to_browser/);
-    assert.doesNotMatch(html, /<meta property="og:title"/);
-    assert.doesNotMatch(html, /<meta property="og:description"/);
+    assert.match(html, /<meta property="og:title" content="strategy.md">/);
+    assert.match(html, /<meta property="og:description" content="exampleorg\/company-docs · company\/strategy.md · 在本机指定工作目录打开">/);
+
+    const base = `http://127.0.0.1:${port}/open?repo=owner%2Frepo&path=docs%2Fplan.md`;
+    const titled = await fetch(`${base}&title=${encodeURIComponent('团队 <Plan> & "Review"')}&snippet=PRIVATE_BODY`);
+    const titledHtml = await titled.text();
+    assert.equal(titled.status, 200);
+    assert.match(titledHtml, /<title>团队 &lt;Plan&gt; &amp; &quot;Review&quot;<\/title>/);
+    assert.match(titledHtml, /<meta property="og:title" content="团队 &lt;Plan&gt; &amp; &quot;Review&quot;">/);
+    assert.doesNotMatch(titledHtml, /PRIVATE_BODY/);
+    const titledPage = runOpenPageScript(titledHtml);
+    titledPage.dispatchWindow("DOMContentLoaded");
+    const titledTarget = new URL(titledPage.location.href);
+    assert.equal(titledTarget.searchParams.get("path"), "docs/plan.md");
+    assert.equal(titledTarget.searchParams.has("title"), false);
+    for (const suffix of ["&title=one&title=two", "&title=", `&title=${"x".repeat(101)}`, "&title=bad%00title"]) {
+      assert.equal((await fetch(base + suffix)).status, 400);
+    }
+    const head = await fetch(`${base}&title=Plan`, { method: "HEAD" });
+    assert.equal(head.status, 200);
+    assert.equal(await head.text(), "");
+    const icon = await fetch(`http://127.0.0.1:${port}/open/icon.png`);
+    assert.equal(icon.headers.get("content-type"), "image/png");
+    assert.deepEqual([...new Uint8Array(await icon.arrayBuffer()).slice(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
 
     const page = runOpenPageScript(html);
     page.dispatchWindow("DOMContentLoaded");
@@ -935,7 +957,7 @@ test("OpenGlance update server renders versioned share links and reports handoff
     );
     const legacyHtml = await legacyResponse.text();
     assert.equal(legacyResponse.status, 200);
-    assert.match(legacyHtml, /<meta property="og:title" content="正在 OpenGlance 中打开分享文档">/);
+    assert.match(legacyHtml, /<meta property="og:title" content="README.md">/);
     assert.match(legacyHtml, /<meta property="og:description" content="owner\/repo · README\.md">/);
   } finally {
     server.kill("SIGTERM");

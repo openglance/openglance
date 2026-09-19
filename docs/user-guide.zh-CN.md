@@ -365,6 +365,9 @@ node "$(git rev-parse --show-toplevel)/tools/generate-openglance-open-link.mjs" 
 把生成器返回的 HTTPS URL 原样放进 Markdown 链接：
 `Open in OpenGlance: [<文档标题>](<返回的 HTTPS URL>)`
 
+生成器会将文档标题放入 HTTPS 链接，让 Codex 等客户端预览。标题会对链接接收者和预览服务可见；
+敏感标题可用 `--no-preview-title` 省略。不会传输正文或 AI 摘要。
+
 不要只返回本机绝对路径，也不要手工拼接 `/open`、`/share` 或 `openglance://` URL。`/open` 只用于本机
 定位和预览，不证明文件已经发布。需要把链接发送给其他人时，先把文档发布到 `main`，再使用 OpenGlance
 的“复制分享链接”。

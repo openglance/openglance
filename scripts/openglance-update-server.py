@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import base64
 from calendar import monthrange
 from datetime import date, datetime, timedelta, timezone
 import gzip
@@ -29,6 +30,93 @@ HANDOFF_TTL_SECONDS = 600
 # generations register this protocol, while OpenGlance also registers the
 # canonical openglance scheme.
 HOSTED_HANDOFF_PROTOCOL = "git-leaf"
+# 64px favicon derived from assets/icons/openglance.png; embedded for single-file deployment.
+LINK_ICON_PNG = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAABGdBTUEAALGPC/xhBQAAACBjSFJNAAB6JgAAgIQAAPoAAACA6AAA"
+    "dTAAAOpgAAA6mAAAF3CculE8AAAARGVYSWZNTQAqAAAACAABh2kABAAAAAEAAAAaAAAAAAADoAEAAwAAAAEAAQAAoAIABAAAAAEA"
+    "AABAoAMABAAAAAEAAABAAAAAAEZRQrAAAAHNaVRYdFhNTDpjb20uYWRvYmUueG1wAAAAAAA8eDp4bXBtZXRhIHhtbG5zOng9ImFk"
+    "b2JlOm5zOm1ldGEvIiB4OnhtcHRrPSJYTVAgQ29yZSA2LjAuMCI+CiAgIDxyZGY6UkRGIHhtbG5zOnJkZj0iaHR0cDovL3d3dy53"
+    "My5vcmcvMTk5OS8wMi8yMi1yZGYtc3ludGF4LW5zIyI+CiAgICAgIDxyZGY6RGVzY3JpcHRpb24gcmRmOmFib3V0PSIiCiAgICAg"
+    "ICAgICAgIHhtbG5zOmV4aWY9Imh0dHA6Ly9ucy5hZG9iZS5jb20vZXhpZi8xLjAvIj4KICAgICAgICAgPGV4aWY6Q29sb3JTcGFj"
+    "ZT4xPC9leGlmOkNvbG9yU3BhY2U+CiAgICAgICAgIDxleGlmOlBpeGVsWERpbWVuc2lvbj4xMDI0PC9leGlmOlBpeGVsWERpbWVu"
+    "c2lvbj4KICAgICAgICAgPGV4aWY6UGl4ZWxZRGltZW5zaW9uPjEwMjQ8L2V4aWY6UGl4ZWxZRGltZW5zaW9uPgogICAgICA8L3Jk"
+    "ZjpEZXNjcmlwdGlvbj4KICAgPC9yZGY6UkRGPgo8L3g6eG1wbWV0YT4Kwe07qQAAFflJREFUeAGtWwmUVdWVPe/9X1VQxSyCA4kT"
+    "KjPGtApOsZVJDYlpB5yNJqaDNkog6krotHFYEYcESWIrHYeILWmNGs0iCIJZ2CZKYlDEBiQqyIwMxSBWAfWH3vvc4d33/q+yWN13"
+    "1X/33HPOPdOd73sVSVvprLPyNTs6Di6VoqEipXEi0ZiEPTKgzUBLSISiTDlNPfBSuZypY8se7QHwleeKxM/Ecfndlu7N78nChYVM"
+    "ZV+sbmWf4R3jbl2uiST+lkTlEyTK5SEUf06JraZZRkSrjmf4vAmtAU5Xhu5tcHjaFcAKQhftKBcLUo6WlKX0WGnn7idl/ZvNjtPl"
+    "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"
+)
 SHARE_PREVIEW_TITLE_MAX_LENGTH = 100
 SHARE_PREVIEW_SNIPPET_MAX_LENGTH = 200
 TELEMETRY_MAX_BODY_BYTES = 64 * 1024
@@ -412,6 +500,8 @@ class OpenGlanceUpdateHandler(SimpleHTTPRequestHandler):
     server_version = "OpenGlanceUpdates/1.0"
 
     def do_GET(self):
+        if self._handle_link_icon(send_body=True):
+            return
         if self._handle_share_status():
             return
         if self._handle_open_status():
@@ -446,6 +536,8 @@ class OpenGlanceUpdateHandler(SimpleHTTPRequestHandler):
         self.send_error(HTTPStatus.NOT_FOUND)
 
     def do_HEAD(self):
+        if self._handle_link_icon(send_body=False):
+            return
         if self._handle_download_page(send_body=False):
             return
         if self._handle_share_page(send_body=False):
@@ -495,6 +587,19 @@ class OpenGlanceUpdateHandler(SimpleHTTPRequestHandler):
             self.wfile.write(body)
         return True
 
+    def _handle_link_icon(self, send_body):
+        if urlparse(self.path).path != "/open/icon.png":
+            return False
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "image/png")
+        self.send_header("Content-Length", str(len(LINK_ICON_PNG)))
+        self.send_header("Cache-Control", "public, max-age=86400")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.end_headers()
+        if send_body:
+            self.wfile.write(LINK_ICON_PNG)
+        return True
+
     def _handle_open_page(self, send_body):
         parsed = urlparse(self.path)
         if parsed.path != "/open":
@@ -504,6 +609,16 @@ class OpenGlanceUpdateHandler(SimpleHTTPRequestHandler):
         repository_values = query.get("repo", [])
         path_values = query.get("path", [])
         worktree_values = query.get("worktree", [])
+        title_values = query.get("title", [])
+        if len(title_values) > 1:
+            self._send_open_error(send_body)
+            return True
+        preview_title = normalize_share_preview_text(
+            title_values[0] if title_values else "", SHARE_PREVIEW_TITLE_MAX_LENGTH,
+        )
+        if title_values and not preview_title:
+            self._send_open_error(send_body)
+            return True
         if len(repository_values) > 1 or len(path_values) > 1 or len(worktree_values) > 1:
             self._send_open_error(send_body)
             return True
@@ -536,7 +651,7 @@ class OpenGlanceUpdateHandler(SimpleHTTPRequestHandler):
         deep_link = f"{HOSTED_HANDOFF_PROTOCOL}://{deep_link_host}?" + urlencode(deep_link_params)
 
         if repository:
-            title = "正在 OpenGlance 中打开文档"
+            title = preview_title or posixpath.basename(document_path)
             detail = f"{repository} · {document_path}"
         else:
             title = "正在启动 OpenGlance"
@@ -546,6 +661,8 @@ class OpenGlanceUpdateHandler(SimpleHTTPRequestHandler):
             detail,
             deep_link,
             handoff_id,
+            preview_title=title,
+            preview_description=detail + (" · 在本机指定工作目录打开" if worktree else " · 在 OpenGlance 中打开") if repository else detail,
         ).encode("utf-8")
         self.send_response(HTTPStatus.OK)
         self._send_open_headers(len(body))
@@ -607,12 +724,12 @@ class OpenGlanceUpdateHandler(SimpleHTTPRequestHandler):
         })
         detail = f"{repository} · {document_path}"
         body = open_page_html(
-            "正在 OpenGlance 中打开分享文档",
+            preview_title or posixpath.basename(document_path),
             detail,
             deep_link,
             handoff_id,
             status_endpoint="/share/status",
-            preview_title=preview_title or "正在 OpenGlance 中打开分享文档",
+            preview_title=preview_title or posixpath.basename(document_path),
             preview_description=preview_snippet or detail,
         ).encode("utf-8")
         self.send_response(HTTPStatus.OK)
@@ -655,7 +772,7 @@ class OpenGlanceUpdateHandler(SimpleHTTPRequestHandler):
         self.send_header(
             "Content-Security-Policy",
             "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; "
-            "connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+            "connect-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
         )
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("X-Content-Type-Options", "nosniff")
@@ -1578,11 +1695,13 @@ def open_page_html(
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>{safe_document_title}</title>
+  <link rel="icon" type="image/png" sizes="64x64" href="/open/icon.png">
+  <link rel="apple-touch-icon" href="/open/icon.png">
 {preview_meta}  <style>
     :root {{ color-scheme: light dark; font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }}
     body {{ margin: 0; min-height: 100vh; display: grid; place-items: center; background: #f4f7f5; color: #18211d; }}
     main {{ width: min(420px,calc(100vw - 48px)); padding: 36px; border: 1px solid #dce5df; border-radius: 18px; background: #fff; box-shadow: 0 18px 48px rgba(27,62,45,.12); text-align: center; }}
-    h1 {{ margin: 0 0 12px; font-size: 25px; }} p {{ margin: 0 0 26px; color: #5c6861; line-height: 1.6; }}
+    h1 {{ margin: 0 0 12px; font-size: 25px; overflow-wrap: anywhere; }} p {{ margin: 0 0 26px; color: #5c6861; line-height: 1.6; overflow-wrap: anywhere; }}
     .button {{ display: inline-block; padding: 11px 18px; border-radius: 9px; background: #238a5a; color: #fff; font-weight: 650; text-decoration: none; }}
     .status {{ margin: 18px 0 0; font-size: 13px; }}
     @media (prefers-color-scheme: dark) {{ body {{ background:#101512;color:#edf4f0; }} main {{ background:#17201b;border-color:#2a3830; }} p {{ color:#a9b8b0; }} }}

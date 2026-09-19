@@ -237,6 +237,8 @@ Git 身份。完整事件语义与禁止推断项见英文技术文档
 - Source／Live 实时写回、localhost 绑定、MDX-lite 白名单、分享 revision 门禁和 Git 历史安全不是个人设置。
 - 公开 `/open`、`/share` 页面由 Mango Future 托管，只承担打开和分享中转。它们会接收仓库标识和文档元数据，
   不接收 Git 凭证或文档正文；完整说明见[托管链接的元数据与隐私](docs/hosted-links.zh-CN.md)。
+- HTTPS 文档链接为 Codex 等支持预览的客户端提供标题、仓库路径与小图标。生成器默认带上文档标题；
+  `--no-preview-title` 可省略标题，预览不传正文或 AI 摘要。
 
 ## 开发验证
 
