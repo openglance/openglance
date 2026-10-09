@@ -4912,15 +4912,23 @@ tr:last-child td {
 
 .cm-live-table-cell-editor {
   display: block;
+  box-sizing: border-box;
   width: 100%;
-  min-width: 96px;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 1.5em;
   border: 0;
   outline: 0;
+  overflow: hidden;
+  resize: none;
   background: transparent;
   color: var(--text);
   font: inherit;
   line-height: inherit;
+  overflow-wrap: anywhere;
   padding: 0;
+  white-space: pre-wrap;
+  field-sizing: content;
 }
 
 .cm-live-block-preview-mdx .cm-live-block-preview-card {
