@@ -33,7 +33,8 @@ Revision: `32768f51afb5a110a57bad4caef144fdfe25a714`.
 - [Parser and serializer](https://github.com/dejuknow/md-redline/blob/32768f51afb5a110a57bad4caef144fdfe25a714/src/lib/comment-parser.ts): `serializeComment` writes a compact `@comment` JSON marker; it escapes `-->` and `--!>` using JSON Unicode escapes and omits derived location fields.
 - The same file's `insertComment` places a marker near the selected passage, relocating it out of
   frontmatter, code containers, and existing HTML comments. Detection combines marker scanning with
-  container checks. This is an inline design, not evidence of the proposed EOF grammar.
+  container checks. This is an inline design, not verification of OpenGlance's proposed record grammar
+  or default EOF placement.
 - [Types](https://github.com/dejuknow/md-redline/blob/32768f51afb5a110a57bad4caef144fdfe25a714/src/types.ts) distinguish persisted messages/status from computed stale/recovered anchors.
 - [Server](https://github.com/dejuknow/md-redline/blob/32768f51afb5a110a57bad4caef144fdfe25a714/server/index.ts) uses per-file in-process write serialization; `/api/file` optionally checks expected modification time before an atomic write. These controls do not prove safe concurrent writes by arbitrary external processes.
 
@@ -99,7 +100,8 @@ source is private and a plain file move can orphan its path-based comment log.
 No implementation source or installed App was examined. Its claims about conflict prevention,
 notifications, and editor preservation remain vendor statements. In particular, a union merge driver
 does not by itself establish deterministic resolution of contradictory status changes. Notula is useful
-product evidence, not a verified implementation of the proposed footer or a conflict-free guarantee.
+product evidence, not a verified implementation of the proposed in-file records or a conflict-free
+guarantee.
 
 ## Other previously referenced tools
 
@@ -169,15 +171,53 @@ not a compare-before-write guard. Existing line selection and Agent Context stor
 not supply a general rendered-character mapping. Those observations motivate prototype gates in the
 proposal and are not fixes delivered by this documentation task.
 
+### Editor history, placement, and revision probes
+
+Follow-up checks used OpenGlance revision `838745b84fa28b099d430c2740b6c36ec1956603`, which adds the
+proposal and audit without changing runtime code from the baseline above. The read-only experiments
+ran with Node `24.16.0` and installed `@codemirror/commands` `6.10.4`, using real CodeMirror history and
+OpenGlance's exported `minimalDocumentChange`. A fixture envelope is just text in these experiments;
+the proposed record parser and comments UI do not yet exist.
+
+| Experiment | Observed result | Limit and consequence |
+| --- | --- | --- |
+| Make a local body edit, append an incoming comment through an ordinary isolated history transaction, then Undo/Redo | Undo removes the incoming comment while retaining the local body edit; Redo restores the comment | Demonstrates that current-style programmatic dispatch can put synchronization into history; no desktop interaction was exercised |
+| Repeat with `Transaction.addToHistory.of(false)` on the incoming append | Undo reverts the local body edit and retains the comment; Redo restores the body edit and retains the comment | Supports explicit non-history synchronization for this nonoverlapping append; overlapping edits, panel actions, and saves still require acceptance tests |
+| Append a normal `## Rollback` section after the proposal's complete example record | The valid envelope now has non-whitespace body content after it | EOF-only recognition would fail a routine document append; no proposed parser was executed |
+| Change the example body from `launch next month.` to `launch on November 1.` | Original `exact` text disappears from the body; the stored thread is unchanged | Motivates an explicit result selector on the agent reply; does not demonstrate an implemented relocation feature |
+| Calculate the proposed body projection over known complete record-line ranges | Digest stays equal after EOF appends, record edits/deletion, and CRLF conversion; body text and internal blank-line edits change it | Tests projection rules using fixture ranges, not Markdown-aware discovery or a shared production helper |
+
+The revised example's projected body is exactly `# Launch plan\n\nWe plan to launch on November 1.`
+with no final newline. Its SHA-256 is
+`d2779a1274a295da96ef68e3d3549561bfd348bdcf1f9743f0ad254a76c59690`, matching the proposal's
+reply fragment. This is a reference example; shared parser-based vectors remain a prototype gate.
+
+Source inspection confirms that `src/client/source-editor.mjs` currently calls `view.dispatch` from
+`setValue` without a history annotation; suppressing its callback is a separate mechanism. The first
+two probes isolate the relevant history behavior rather than claiming that an OpenGlance comment was
+actually lost in the current App.
+
+In `public/app.js`, `scheduleSourceSync` advances `sourceRevision` and invalidates a prepared remote
+merge; apply checks that revision again. Its critical-section control makes the source editor inert.
+The server's `applyPreparedDirtyRemoteMerge` in `src/server/git-remote-sync.mjs` checks workspace drift,
+applies a patch, updates the branch/index, verifies the resulting tree, and can enter rollback. These
+existing guards must include future Preview comment writes and cooperating helper writes through a
+server-side mutation boundary. Inspection identifies an integration requirement, not demonstrated
+silent data loss or a reason to replace the existing merge/recovery model. No Git fault-injection or
+concurrent mutation experiment was run for this audit.
+
 ## Review conclusion
 
 The reviewed direction is suitable for a bounded prototype. The source audit supports direct agent
 access, explicit state, retained displaced comments, and careful local write coordination. It does not
-establish that a footer format already exists as a cross-tool standard or that the proposed UI/storage
+establish that this record format already exists as a cross-tool standard or that the proposed UI/storage
 has been accepted in OpenGlance.
 
 The proposal incorporates the identified correctness issues: format/save compatibility, `.md` versus
 MDX, unsafe EOF placement, ambiguous passage identity, incomplete selection mapping, stale full-source
-saves, malformed-record preservation, repository visibility, and normal Git conflict handling. The
-remaining evidence needed is the prototype and acceptance matrix, followed by a decision on the file
-format. No third-party source was copied into OpenGlance runtime code.
+saves, undo/redo preservation, coordination with App Git mutations, recognition after ordinary body
+appends, an explicit link from agent revisions to proposed results, malformed-record preservation,
+repository visibility, and normal Git conflict handling. The remaining evidence needed is the
+prototype and acceptance matrix, including a shared body-hash specification and history/concurrency
+cases, followed by a decision on the file format. No third-party source was copied into OpenGlance
+runtime code.
