@@ -38,7 +38,7 @@ import {
   listGitWorktrees,
   worktreeDisplayPath,
 } from "./git-worktrees.mjs";
-import { buildFileTree } from "./tree.mjs";
+import { createRepositoryTreeCache } from "./repository-tree-cache.mjs";
 import {
   frontmatterDocumentProfile,
   frontmatterFacetsPayload,
@@ -138,6 +138,7 @@ export function createPreviewServer({
     linkPreview: createLinkPreviewProvider({ ghRunner, githubTransport }),
     managedPlaceholders: new Set(),
     remoteMergePreparations: createRemoteMergePreparationStore(),
+    treeCache: createRepositoryTreeCache({ repoRoot }),
   };
   const server = http.createServer(async (request, response) => {
     try {
@@ -155,6 +156,7 @@ export function createPreviewServer({
       : null;
   };
   server.on("close", () => {
+    serverContext.treeCache.dispose();
     void serverContext.linkPreview.dispose();
     void serverContext.remoteMergePreparations.dispose();
   });
@@ -310,7 +312,10 @@ async function handleRequest(request, response, context) {
 
   if (requestUrl.pathname === "/api/tree") {
     const repo = await localRequestRepository(request, requestUrl, context);
-    const tree = await buildFileTree(repo.root);
+    const tree = await context.treeCache.get({
+      head: repo.head,
+      force: requestUrl.searchParams.get("refresh") === "1",
+    });
     const frontmatterProfile = await frontmatterFilterProfile(repo.root);
     sendJson(response, 200, {
       repo: repo.id,
@@ -318,6 +323,7 @@ async function handleRequest(request, response, context) {
       detached: repo.detached,
       canEdit: canEditRepository({ repo, isLocalRequest: canEditRequest(request, context) }),
       frontmatterAllowedKeys: frontmatterProfile.allowedKeys,
+      revision: context.treeCache.revision,
       tree,
     });
     return;

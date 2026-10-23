@@ -315,6 +315,7 @@ const outlineActiveViewportState = createOutlineActiveViewportState();
 
 const state = {
   tree: [],
+  treeRevision: null,
   currentRepo: initialRepoId,
   currentWorktreeId: initialWorktreeId,
   worktrees: [],
@@ -364,6 +365,7 @@ const state = {
   activeFrontmatterField: null,
   statusTimer: null,
   treeTimer: null,
+  treeRefreshInFlight: null,
   watchStream: null,
   sourceEditor: null,
   sourceSyncTimer: null,
@@ -1294,7 +1296,7 @@ function handleWorktreeSelection(event) {
 }
 
 async function loadTree({ force = false } = {}) {
-  const response = await fetch(apiUrl("/api/tree"));
+  const response = await fetch(apiUrl("/api/tree", { refresh: force ? "1" : undefined }));
   if (!response.ok) {
     throw new Error("Unable to load repository tree");
   }
@@ -1305,8 +1307,10 @@ async function loadTree({ force = false } = {}) {
   const frontmatterAllowedKeys = normalizeFrontmatterAllowedKeys(payload.frontmatterAllowedKeys);
   const frontmatterKeysChanged = !sameStringArray(state.frontmatterAllowedKeys, frontmatterAllowedKeys);
   const treeChanged = hasTreeChanged(state.tree, payload.tree);
+  const metadataChanged = state.treeRevision !== payload.revision;
+  state.treeRevision = payload.revision;
   const favoritesChanged = await pruneMissingSidebarFavorites(payload.tree);
-  if (!force && !treeChanged && !frontmatterKeysChanged) {
+  if (!force && !treeChanged && !frontmatterKeysChanged && !metadataChanged) {
     if (favoritesChanged && state.sidebarTab === "favorites") {
       renderTree();
     }
@@ -1326,20 +1330,47 @@ async function loadTree({ force = false } = {}) {
   renderActiveFrontmatterFilters();
   renderTree();
   renderDocumentTabs();
+  if (metadataChanged && (state.filter || state.frontmatterFilters.length > 0)) {
+    await ensureFrontmatterFacets();
+  }
 }
 
 function resetTreePolling() {
   if (state.treeTimer) {
     window.clearInterval(state.treeTimer);
+    state.treeTimer = null;
   }
-  state.treeTimer = window.setInterval(refreshTreeAndGitStatus, TREE_REFRESH_INTERVAL_MS);
+  if (document.visibilityState === "hidden") {
+    return;
+  }
+  state.treeTimer = window.setInterval(() => {
+    void refreshTreeAndGitStatus().catch(() => {});
+  }, TREE_REFRESH_INTERVAL_MS);
 }
 
-async function refreshTreeAndGitStatus() {
-  await loadWorktrees();
-  await loadTree();
-  await loadGitStatus();
+async function refreshTreeAndGitStatus({ force = false } = {}) {
+  while (state.treeRefreshInFlight) {
+    await state.treeRefreshInFlight;
+    if (!force) return;
+  }
+  state.treeRefreshInFlight = (async () => {
+    await loadWorktrees();
+    await loadTree({ force });
+    await loadGitStatus();
+  })();
+  try { await state.treeRefreshInFlight; }
+  finally { state.treeRefreshInFlight = null; }
 }
+
+document.addEventListener("visibilitychange", () => {
+  resetTreePolling();
+  resetStatusPolling();
+  resetDocumentWatch();
+  if (document.visibilityState === "visible") {
+    void refreshTreeAndGitStatus({ force: true }).catch(() => {});
+    void checkDocumentStatus();
+  }
+});
 
 async function loadGitStatus() {
   const previousGitChanges = state.gitChanges;
@@ -9133,7 +9164,7 @@ function resetStatusPolling() {
     window.clearInterval(state.statusTimer);
     state.statusTimer = null;
   }
-  if (!state.currentDocument) {
+  if (!state.currentDocument || document.visibilityState === "hidden") {
     return;
   }
 
@@ -9146,7 +9177,7 @@ function resetDocumentWatch() {
     state.watchStream = null;
   }
   const request = currentDocumentRequest();
-  if (!request || !window.EventSource) {
+  if (!request || !window.EventSource || document.visibilityState === "hidden") {
     return;
   }
 
