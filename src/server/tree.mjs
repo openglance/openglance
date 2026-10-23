@@ -17,8 +17,10 @@ export async function buildMarkdownTree(repoRoot) {
   return treeFromFiles(files.filter((file) => isMarkdownPath(file.path)));
 }
 
-export async function buildFileTree(repoRoot) {
-  const files = await listRepositoryFiles(repoRoot);
+export async function buildFileTree(repoRoot, { entries = null } = {}) {
+  const files = entries
+    ? await statGitWorktreeFiles(repoRoot, entries)
+    : await listRepositoryFiles(repoRoot);
   await attachDocumentTitles(repoRoot, files);
   return treeFromFiles(files);
 }
@@ -35,6 +37,12 @@ export async function listRepositoryFiles(repoRoot) {
 }
 
 async function listGitWorktreeFiles(repoRoot) {
+  return statGitWorktreeFiles(repoRoot, await listGitWorktreeEntries(repoRoot));
+}
+
+// Git discovery alone does not stat every path or read document titles. The tree cache
+// uses it to distinguish new visible files from activity in ignored build directories.
+export async function listGitWorktreeEntries(repoRoot) {
   const [trackedResult, untrackedResult, stagedResult] = await Promise.all([
     runGit(repoRoot, ["ls-files", "--cached", "-z"]),
     runGit(repoRoot, ["ls-files", "--others", "--exclude-standard", "-z"]),
@@ -45,8 +53,15 @@ async function listGitWorktreeFiles(repoRoot) {
     ...nulPaths(trackedResult.stdout),
     ...nulPaths(untrackedResult.stdout),
   ]);
+  return [...paths].map((relativePath) => ({
+    path: relativePath,
+    mode: stagedModes.get(relativePath) ?? "",
+  }));
+}
+
+async function statGitWorktreeFiles(repoRoot, entries) {
   const files = [];
-  for (const relativePath of paths) {
+  for (const { path: relativePath, mode } of entries) {
     const absolutePath = path.join(repoRoot, ...relativePath.split("/"));
     let fileStat;
     try {
@@ -57,7 +72,6 @@ async function listGitWorktreeFiles(repoRoot) {
       }
       throw error;
     }
-    const mode = stagedModes.get(relativePath) ?? "";
     if (mode === "160000") {
       files.push(fileRecord(relativePath, "submodule"));
       continue;

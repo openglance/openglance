@@ -297,6 +297,21 @@ All, Favorites, Sync, and file-tree preferences must never alter Git discovery, 
 or sync scope. Displayed document titles never replace the repository-relative path used for sorting,
 opening, favorites, sessions, file operations, Git status, or synchronization.
 
+Each local service keeps one file-tree snapshot for its worktree and shares an in-flight rebuild
+between requests. Native recursive filesystem events invalidate it on visible file changes, including
+repeated edits to an already modified document. Unknown paths and Git index/ignore changes first pass
+through Git discovery, so ignored build output does not trigger file-stat or document-title scans.
+Changed HEADs and explicit refreshes bypass the snapshot. A five-minute reconciliation bounds missed
+events; when recursive watching fails, requests fall back to five-second expiry and retry watching.
+Rebuild revisions also invalidate the browser's frontmatter search/facet metadata when filenames and
+titles stay the same. The cache does not authorize reads or writes and never replaces request-time
+repository, branch, or path validation.
+
+Visible workbenches refresh the tree, worktrees and local Git status every five seconds and the current
+document status every two seconds, with document events providing faster updates. Hidden workbenches
+pause those intervals and close the document stream. Becoming visible immediately reopens the stream
+and refreshes the tree, Git state and current document, including changes made while hidden.
+
 | File class | Capability |
 | --- | --- |
 | Markdown and MDX | Preview, Source, and Live; editable |
