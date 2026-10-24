@@ -105,6 +105,15 @@
   --shadow-toast: 0 14px 30px rgba(15, 23, 42, 0.28);
 }
 
+:root[data-document-margins="wide"] {
+  /* Keep a 1072px reading width while retaining safe gutters in narrow windows. */
+  --document-inline-padding: max(56px, calc(50% - 536px));
+  --source-line-gutter-inset: max(
+    46px,
+    calc(50% - 536px - var(--source-line-gutter-width) - var(--source-line-gutter-gap))
+  );
+}
+
 :root[data-theme="dark"] {
   color-scheme: dark;
   --bg: #111214;

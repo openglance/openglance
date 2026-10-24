@@ -344,6 +344,7 @@ const state = {
   }),
   documentFont: initialUserPreferences.documentFont,
   documentFontSize: initialUserPreferences.documentFontSize,
+  documentMargins: initialUserPreferences.documentMargins,
   fileTreeMode: initialUserPreferences.fileTreeMode,
   showDocumentTitles: initialUserPreferences.showDocumentTitles,
   gitRemoteCheckIntervalMinutes: initialUserPreferences.gitRemoteCheckIntervalMinutes,
@@ -3724,6 +3725,7 @@ function applyAppearancePreferences(preferences) {
   state.colorMode = normalized.colorMode;
   state.documentFont = normalized.documentFont;
   state.documentFontSize = normalized.documentFontSize;
+  state.documentMargins = normalized.documentMargins;
   state.fileTreeMode = normalized.fileTreeMode;
   state.showDocumentTitles = normalized.showDocumentTitles;
   state.theme = effectiveColorScheme(state.colorMode, {
@@ -3731,6 +3733,7 @@ function applyAppearancePreferences(preferences) {
   });
   document.documentElement.dataset.theme = state.theme;
   document.documentElement.dataset.documentFont = state.documentFont;
+  document.documentElement.dataset.documentMargins = state.documentMargins;
   document.documentElement.style.colorScheme = state.theme;
   document.documentElement.style.setProperty("--document-font-size", `${state.documentFontSize}px`);
   updateThemeToggle();
@@ -3749,6 +3752,7 @@ function toggleWebTheme() {
     colorMode: theme,
     documentFont: state.documentFont,
     documentFontSize: state.documentFontSize,
+    documentMargins: state.documentMargins,
     fileTreeMode: state.fileTreeMode,
     showDocumentTitles: state.showDocumentTitles,
   });
@@ -3837,6 +3841,7 @@ function handleSystemColorSchemeChange() {
     colorMode: state.colorMode,
     documentFont: state.documentFont,
     documentFontSize: state.documentFontSize,
+    documentMargins: state.documentMargins,
     fileTreeMode: state.fileTreeMode,
     showDocumentTitles: state.showDocumentTitles,
   });
