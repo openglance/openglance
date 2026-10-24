@@ -37992,6 +37992,7 @@ function isRemoteImageSource(source) {
 // src/client/source-editor.mjs
 var livePreviewEnterEffect = StateEffect.define();
 var livePreviewExitEffect = StateEffect.define();
+var preserveEditorContextAnnotation = Annotation.define();
 var sourceEditorSetup = [
   minimalSetup,
   lineNumbers(),
@@ -39047,6 +39048,7 @@ function createSourceEditor({
   }
   view = new EditorView({
     doc: doc2,
+    dispatchTransactions: dispatchEditorTransactions,
     extensions: [
       sourceEditorSetup,
       markdown(),
@@ -39283,7 +39285,7 @@ function createSourceEditor({
       };
       suppressChange = true;
       try {
-        view.dispatch({
+        view.dispatch(preserveEditorContext({
           changes,
           effects: remoteMergeHighlightEffect.of(
             highlightChanges ? {
@@ -39291,7 +39293,7 @@ function createSourceEditor({
               to: changes.from + String(changes.insert ?? "").length
             } : null
           )
-        });
+        }, preserveSelection));
       } finally {
         suppressChange = false;
       }
@@ -39407,14 +39409,14 @@ function createSourceEditor({
           to: line.to,
           insert: String(text2 ?? "")
         },
-        scrollIntoView: true
+        scrollIntoView: !preserveSelection
       };
       if (!preserveSelection) {
         transaction.selection = {
           anchor: line.from + String(text2 ?? "").length
         };
       }
-      view.dispatch(transaction);
+      view.dispatch(preserveEditorContext(transaction, preserveSelection));
       return true;
     },
     lineRect(lineNumber) {
@@ -39467,28 +39469,33 @@ function createSourceEditor({
         ].join("")
       );
     },
-    replaceDocument(value) {
+    replaceDocument(value, { preserveSelection = true } = {}) {
       const nextValue = String(value ?? "");
-      view.dispatch({
-        changes: {
-          from: 0,
-          to: view.state.doc.length,
-          insert: nextValue
-        },
-        scrollIntoView: true
-      });
+      const currentValue = view.state.doc.toString();
+      if (currentValue === nextValue) {
+        return false;
+      }
+      const changes = preserveSelection ? minimalDocumentChange(currentValue, nextValue) : {
+        from: 0,
+        to: view.state.doc.length,
+        insert: nextValue
+      };
+      view.dispatch(preserveEditorContext({
+        changes,
+        scrollIntoView: !preserveSelection
+      }, preserveSelection));
       return true;
     },
-    deleteLine(lineNumber) {
+    deleteLine(lineNumber, { preserveSelection = true } = {}) {
       if (!Number.isInteger(lineNumber) || lineNumber < 1 || lineNumber > view.state.doc.lines) {
         return false;
       }
       const line = view.state.doc.line(lineNumber);
       const to = lineNumber < view.state.doc.lines ? view.state.doc.line(lineNumber + 1).from : line.to;
-      view.dispatch({
+      view.dispatch(preserveEditorContext({
         changes: { from: line.from, to },
-        scrollIntoView: true
-      });
+        scrollIntoView: !preserveSelection
+      }, preserveSelection));
       return true;
     },
     destroy() {
@@ -39528,6 +39535,41 @@ function createSourceEditor({
       globalThis.removeEventListener?.("resize", componentInteraction.refreshPositions);
       view.destroy();
     }
+  };
+}
+function dispatchEditorTransactions(transactions, view) {
+  if (!editorTransactionsPreserveContext(transactions)) {
+    view.update(transactions);
+    return;
+  }
+  let scrollSnapshot = view.scrollSnapshot();
+  for (const transaction of transactions) {
+    scrollSnapshot = scrollSnapshot?.map(transaction.changes);
+  }
+  const finalState = transactions.at(-1)?.state;
+  if (!scrollSnapshot || !finalState) {
+    view.update(transactions);
+    return;
+  }
+  view.update([
+    ...transactions,
+    finalState.update({ effects: scrollSnapshot })
+  ]);
+}
+function editorTransactionsPreserveContext(transactions = []) {
+  return transactions.some((transaction) => transaction.annotation(preserveEditorContextAnnotation) === true || transaction.isUserEvent("undo") || transaction.isUserEvent("redo"));
+}
+function preserveEditorContext(spec, preserve = true) {
+  if (!preserve) {
+    return spec;
+  }
+  const annotations = spec.annotations === void 0 ? [] : Array.isArray(spec.annotations) ? spec.annotations : [spec.annotations];
+  return {
+    ...spec,
+    annotations: [
+      ...annotations,
+      preserveEditorContextAnnotation.of(true)
+    ]
   };
 }
 function isVerticalTableColumnSelection(selection) {
@@ -39780,9 +39822,9 @@ function createLiveMdxComponentInteraction({
     if (nextSource === source) {
       return false;
     }
-    view.dispatch({
+    view.dispatch(preserveEditorContext({
       changes: { from: start.from, to: end.to, insert: nextSource }
-    });
+    }));
     scheduleRefresh();
     return true;
   };
@@ -40059,13 +40101,13 @@ function createLiveTableInteraction({
       scheduleRefresh();
       return false;
     }
-    view.dispatch({
+    view.dispatch(preserveEditorContext({
       changes: {
         from: block2.from,
         to: block2.to,
         insert: nextSource
       }
-    });
+    }));
     scheduleRefresh();
     return true;
   };
@@ -42254,6 +42296,8 @@ export {
   createLiveMdxComponentInteraction,
   createLiveTableInteraction,
   createSourceEditor,
+  dispatchEditorTransactions,
+  editorTransactionsPreserveContext,
   imageLineAttributes,
   imageLineForAction,
   isLiveBlankClick,
@@ -42282,6 +42326,7 @@ export {
   normalizeImageWidth2 as normalizeImageWidth,
   pastedImageInsertionText,
   pastedTextLinkCandidate,
+  preserveEditorContext,
   slashCommandCompletionSource,
   slashCommandTemplate,
   slashCommandsForLocale,
