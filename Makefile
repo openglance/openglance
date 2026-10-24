@@ -25,6 +25,9 @@ smoke-tree-tooltip-mac:
 smoke-idle-refresh-mac:
 	node scripts/smoke-idle-refresh-mac.mjs
 
+smoke-quiet-reading-mac:
+	node scripts/smoke-quiet-reading-mac.mjs
+
 smoke-remote-sync-mac:
 	node scripts/smoke-remote-sync-mac.mjs
 
@@ -97,4 +100,4 @@ stage-updates-win:
 publish-updates-win:
 	$(win-release-env) node scripts/release-windows.mjs publish-updates
 
-.PHONY: package-mac install-dev-mac smoke-dev-mac smoke-app-name-mac smoke-tree-tooltip-mac smoke-idle-refresh-mac smoke-remote-sync-mac smoke-live-table-mac smoke-document-changes-mac smoke-document-baseline-mac smoke-commit-summary-mac smoke-repository-recovery-mac smoke-document-links-mac smoke-link-previews-mac verify-dev-handoff-mac check-release-prereqs sign-mac dmg-mac notarize-mac staple-mac zip-mac verify-release-mac release-mac stage-updates-mac publish-updates-mac package-win release-win stage-updates-win publish-updates-win
+.PHONY: package-mac install-dev-mac smoke-dev-mac smoke-app-name-mac smoke-tree-tooltip-mac smoke-idle-refresh-mac smoke-quiet-reading-mac smoke-remote-sync-mac smoke-live-table-mac smoke-document-changes-mac smoke-document-baseline-mac smoke-commit-summary-mac smoke-repository-recovery-mac smoke-document-links-mac smoke-link-previews-mac verify-dev-handoff-mac check-release-prereqs sign-mac dmg-mac notarize-mac staple-mac zip-mac verify-release-mac release-mac stage-updates-mac publish-updates-mac package-win release-win stage-updates-win publish-updates-win

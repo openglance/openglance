@@ -307,10 +307,32 @@ Rebuild revisions also invalidate the browser's frontmatter search/facet metadat
 titles stay the same. The cache does not authorize reads or writes and never replaces request-time
 repository, branch, or path validation.
 
-Visible workbenches refresh the tree, worktrees and local Git status every five seconds and the current
-document status every two seconds, with document events providing faster updates. Hidden workbenches
-pause those intervals and close the document stream. Becoming visible immediately reopens the stream
-and refreshes the tree, Git state and current document, including changes made while hidden.
+Visible workbenches check the tree, worktrees and local Git status once per minute. Preview also
+checks current-document status once per minute; Source and Live retain two-second external-change
+checks and the existing 500ms save debounce. A current-file event stream provides faster ordinary
+content updates and watches the containing directory so atomic replacements do not detach it from
+later edits. Git baseline changes and MDX data dependencies remain covered by status checks.
+
+The Refresh now button, a newly focused window and a return from hidden state immediately initiate
+local tree/document/Git checks. Focus and visibility events from one resume burst share a refresh;
+explicit refreshes queued behind older reads recheck afterward. Mode entry keeps the editor inert
+until required current-document checks succeed. Switching modes flushes pending writes, and obsolete
+mode-entry responses cannot activate an editor after another mode or document was selected. A failed
+required body read leaves Preview active. Ordinary successful autosaves update the current file's
+visible title and active search metadata without forcing whole-repository scans; file operations and
+synchronization retain their explicit refreshes.
+
+Hidden workbenches pause local intervals and close the document stream. The existing configured
+remote-check schedule is independent. These intervals are scheduling policies, not hard-real-time
+completion guarantees. None of the display state authorizes a write or replaces execution-time Git,
+path, branch-protection or merge validation.
+
+Transient JSON responses use no-store. An unchanged tree returns fresh repository metadata and a
+small version response instead of resending its contents. That version includes a unique server
+instance scope; because each service owns one worktree and validates the requested repository, it
+cannot reuse a revision from another repository, worktree or restarted server. Polling reads omit
+unused link-origin discovery while continuing to read current HEAD and branch. No HEAD display cache
+is shared with write, sync or merge execution.
 
 | File class | Capability |
 | --- | --- |

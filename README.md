@@ -44,6 +44,11 @@ than Obsidian.
 
 ## Core features
 
+While reading, sidebar and fallback document checks run about once a minute. Current-file events
+still update ordinary edits promptly. Use **Refresh now** in the top bar for an immediate local check;
+refocusing the window also refreshes it. Source and Live keep frequent external-change checks and
+automatically save edits.
+
 - **Preview first, edit when needed.** Markdown and MDX documents open in a fully rendered Preview with
   source-backed line numbers and text selection; Live and Source remain available for focused edits to
   the original files.

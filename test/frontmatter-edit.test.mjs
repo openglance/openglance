@@ -49,3 +49,12 @@ test("deleteFrontmatterLineFromSource removes one source line by 1-based line nu
     "---\ntitle: Standard\n---\n# Body\n",
   );
 });
+
+
+test("body edits keep the saved metadata signature while frontmatter edits invalidate it", async () => {
+  const { frontmatterSourceSignature } = await import("../public/frontmatter-edit.js");
+  const before = "---\nai_snippet: before\n---\n# Title\nBody";
+  assert.equal(frontmatterSourceSignature(before), frontmatterSourceSignature(before + " more body"));
+  assert.notEqual(frontmatterSourceSignature(before), frontmatterSourceSignature(before.replace("before", "after")));
+  assert.notEqual(frontmatterSourceSignature(before), frontmatterSourceSignature("# No metadata"));
+});

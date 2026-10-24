@@ -48,7 +48,8 @@ import {
 import { parseNdjsonRecords } from "./ndjson.js";
 import { csvMarkdownDocumentLink, parseCsvRows } from "./csv-preview.js";
 import { githubFileUrl } from "./file-actions.js";
-import { hasTreeChanged } from "./tree-refresh.js";
+import { hasTreeChanged, updateTreeDocumentTitle } from "./tree-refresh.js";
+import { LOCAL_STATE_INTERVAL_MS, documentStatusIntervalMs, createRefreshQueue, createResumeRefresh } from "./refresh-policy.js";
 import {
   documentStatusRefreshKind,
   shouldReplaceDocumentHtml,
@@ -174,6 +175,7 @@ import {
   addFrontmatterFieldToSource,
   deleteFrontmatterLineFromSource,
   frontmatterKeysFromSource,
+  frontmatterSourceSignature,
   frontmatterLineForValue,
 } from "./frontmatter-edit.js";
 import {
@@ -238,7 +240,7 @@ const SIDEBAR_WIDTH_STEP = 24;
 const DOCUMENT_OUTLINE_WIDTH_STEP = 24;
 const SOURCE_SPLIT_STEP = 5;
 const NDJSON_RECORD_BATCH_SIZE = 100;
-const TREE_REFRESH_INTERVAL_MS = 5000;
+const TREE_REFRESH_INTERVAL_MS = LOCAL_STATE_INTERVAL_MS;
 const SOURCE_SYNC_DELAY_MS = 500;
 const AUTOMATIC_REMOTE_MERGE_IDLE_MS = 2500;
 const GIT_STATUS_REFRESH_DELAY_MS = 800;
@@ -316,6 +318,8 @@ const outlineActiveViewportState = createOutlineActiveViewportState();
 const state = {
   tree: [],
   treeRevision: null,
+  treeVersion: null,
+  savedFrontmatter: "",
   currentRepo: initialRepoId,
   currentWorktreeId: initialWorktreeId,
   worktrees: [],
@@ -366,6 +370,7 @@ const state = {
   statusTimer: null,
   treeTimer: null,
   treeRefreshInFlight: null,
+  modeTransitionId: 0,
   watchStream: null,
   sourceEditor: null,
   sourceSyncTimer: null,
@@ -783,8 +788,17 @@ window.addEventListener(DESKTOP_OPEN_DOCUMENT_EVENT, createDesktopDocumentNaviga
   },
   onError: () => showCopyToast(t("sourceSync.error")),
 }));
+const runImmediateRefresh = createRefreshQueue();
+const scheduleResumeRefresh = createResumeRefresh({
+  refresh: () => refreshWorkbenchNow({ fresh: true }),
+  schedule: (fn, ms) => window.setTimeout(fn, ms),
+  cancel: (id) => window.clearTimeout(id),
+});
+
 window.addEventListener("focus", handleToolStatusActivity);
-window.addEventListener("focus", refreshWorktreesOnWindowFocus);
+window.addEventListener("focus", () => {
+  if (document.visibilityState !== "hidden" && !document.documentElement.classList.contains("is-workbench-loading")) scheduleResumeRefresh();
+});
 window.addEventListener("focus", handleRemoteSyncWindowFocus);
 window.addEventListener("resize", positionFrontmatterFilterPopover);
 window.addEventListener("resize", positionWorktreeSwitcherMenu);
@@ -1296,19 +1310,28 @@ function handleWorktreeSelection(event) {
 }
 
 async function loadTree({ force = false } = {}) {
-  const response = await fetch(apiUrl("/api/tree", { refresh: force ? "1" : undefined }));
+  const response = await fetch(apiUrl("/api/tree", {
+    refresh: force ? "1" : undefined,
+    version: state.treeVersion ?? undefined,
+  }), { cache: "no-store" });
   if (!response.ok) {
     throw new Error("Unable to load repository tree");
   }
   const payload = await response.json();
+  if (payload.unchanged === true && payload.version === state.treeVersion) {
+    payload.tree = state.tree;
+  }
   if (!Array.isArray(payload.tree)) {
     throw new Error("Repository tree response is invalid");
   }
+  applyRepositoryStatus(payload);
+  enforceCurrentRepoEditCapability();
   const frontmatterAllowedKeys = normalizeFrontmatterAllowedKeys(payload.frontmatterAllowedKeys);
   const frontmatterKeysChanged = !sameStringArray(state.frontmatterAllowedKeys, frontmatterAllowedKeys);
   const treeChanged = hasTreeChanged(state.tree, payload.tree);
-  const metadataChanged = state.treeRevision !== payload.revision;
+  const metadataChanged = state.treeVersion !== payload.version;
   state.treeRevision = payload.revision;
+  state.treeVersion = payload.version;
   const favoritesChanged = await pruneMissingSidebarFavorites(payload.tree);
   if (!force && !treeChanged && !frontmatterKeysChanged && !metadataChanged) {
     if (favoritesChanged && state.sidebarTab === "favorites") {
@@ -1366,10 +1389,31 @@ document.addEventListener("visibilitychange", () => {
   resetTreePolling();
   resetStatusPolling();
   resetDocumentWatch();
-  if (document.visibilityState === "visible") {
-    void refreshTreeAndGitStatus({ force: true }).catch(() => {});
-    void checkDocumentStatus();
-  }
+  if (document.visibilityState === "visible") scheduleResumeRefresh();
+  else scheduleResumeRefresh.cancel();
+});
+
+
+async function refreshWorkbenchNow({ fresh = false } = {}) {
+  if (fresh) scheduleResumeRefresh.cancel();
+  return runImmediateRefresh(async () => {
+    const refreshButton = document.querySelector("#workbench-refresh");
+    refreshButton.disabled = true;
+    try {
+      await flushPendingSourceSync();
+      if (state.sourceWriteInFlight) throw new Error("Save is still in progress");
+      await Promise.all([
+        refreshTreeAndGitStatus({ force: true }),
+        checkDocumentStatus({ required: true }),
+      ]);
+      return true;
+    } catch { showCopyToast(t("error.load")); return false; }
+    finally { refreshButton.disabled = false; }
+  }, { fresh });
+}
+
+document.querySelector("#workbench-refresh").addEventListener("click", () => {
+  void refreshWorkbenchNow({ fresh: true });
 });
 
 async function loadGitStatus() {
@@ -2351,6 +2395,7 @@ function applyDocumentData(
   const scrollTop = preserveScroll ? documentContent.scrollTop : 0;
   const shouldReplace = forceReplace || shouldReplaceDocumentHtml(state.currentDocument, documentData);
   state.currentDocument = documentData;
+  state.savedFrontmatter = frontmatterSourceSignature(documentData.source);
   state.documentChangeModel = documentChangeModelForDocument(documentData);
   state.currentFile = documentData.path;
   renderDocumentTabs();
@@ -2375,6 +2420,7 @@ function applyDocumentData(
     setMode(readModePreference({ preferences: state.desktopPreferences }), {
       persist: false,
       focus: false,
+      documentFresh: true,
     });
   } else if (!canEditCurrentDocument() && isEditingModeName(state.mode)) {
     setMode("preview", { persist: false, focus: false });
@@ -2420,7 +2466,29 @@ function applyDocumentData(
   persistWorkbenchSession();
 }
 
-function setMode(mode, { persist = true, focus = true } = {}) {
+function setMode(mode, options = {}) {
+  const transition = ++state.modeTransitionId;
+  if (options.documentFresh || mode === state.mode || !state.currentDocument || !canEditCurrentDocument()) {
+    sourceEditorPane.inert = documentWorkspace.classList.contains("is-applying-remote-merge");
+    applyMode(mode, options);
+    return Promise.resolve();
+  }
+  const request = currentDocumentRequest();
+  sourceEditorPane.inert = true;
+  return (async () => {
+    try {
+      await flushPendingSourceSync();
+      if (isEditingModeName(mode) && !(await refreshWorkbenchNow({ fresh: true }))) return;
+      if (transition === state.modeTransitionId && isCurrentDocumentRequest(request)) {
+        sourceEditorPane.inert = documentWorkspace.classList.contains("is-applying-remote-merge");
+        applyMode(mode, options);
+      }
+    } catch { showCopyToast(t("error.load")); }
+    finally { if (transition === state.modeTransitionId) sourceEditorPane.inert = documentWorkspace.classList.contains("is-applying-remote-merge"); }
+  })();
+}
+
+function applyMode(mode, { persist = true, focus = true } = {}) {
   linkPreviewController.hide();
   outlineClickViewportGuard.end();
   const previousMode = state.mode;
@@ -2480,6 +2548,7 @@ function setMode(mode, { persist = true, focus = true } = {}) {
     scrollPreviewToSourceLine(previousSourceLine);
   }
   refreshDocumentSearch({ preserveIndex: true, reveal: false });
+  resetStatusPolling();
 }
 
 function currentSourceEditorVisibleLine() {
@@ -4081,6 +4150,7 @@ async function syncSourceToDisk() {
   state.sourceSyncTimer = null;
   state.sourceWriteInFlight = true;
   const source = state.sourceEditor.getValue();
+  const metadataChanged = state.savedFrontmatter !== frontmatterSourceSignature(source);
   try {
     const response = await fetch(
       apiUrl("/api/document", { repo: request.repoId, file: request.path }),
@@ -4106,14 +4176,15 @@ async function syncSourceToDisk() {
       sourceHash: payload.sourceHash,
     };
     state.lastWrittenHash = payload.sourceHash;
-    state.frontmatterFacets = null;
+    if (metadataChanged) state.frontmatterFacets = null;
     await refreshCurrentDocument();
-    if (
+    if (metadataChanged && (
       state.frontmatterFilters.length > 0 ||
       (state.filter.length > 0 && state.frontmatterAllowedKeys.length > 0)
-    ) {
+    )) {
       await ensureFrontmatterFacets({ force: true });
     }
+    if (updateTreeDocumentTitle(state.tree, state.currentDocument.path, state.currentDocument.treeTitle)) renderTree();
     scheduleGitStatusRefresh();
     updateSourceSyncStatus("idle");
     const telemetryNow = Date.now();
@@ -9168,7 +9239,7 @@ function resetStatusPolling() {
     return;
   }
 
-  state.statusTimer = window.setInterval(checkDocumentStatus, 2000);
+  state.statusTimer = window.setInterval(() => { void checkDocumentStatus(); }, documentStatusIntervalMs(state.mode));
 }
 
 function resetDocumentWatch() {
@@ -9213,7 +9284,7 @@ async function handleWatchedDocumentChange(event, request = currentDocumentReque
   }
 }
 
-async function checkDocumentStatus() {
+async function checkDocumentStatus({ required = false } = {}) {
   const request = currentDocumentRequest();
   if (!request) {
     return;
@@ -9224,10 +9295,12 @@ async function checkDocumentStatus() {
     response = await fetch(
       apiUrl("/api/document-status", { repo: request.repoId, file: request.path }),
     );
-  } catch {
+  } catch (error) {
+    if (required) throw error;
     return;
   }
   if (!response.ok) {
+    if (required) throw new Error("Unable to check current document");
     return;
   }
 
@@ -9238,6 +9311,7 @@ async function checkDocumentStatus() {
   applyRepositoryStatus(status);
   enforceCurrentRepoEditCapability();
   if (state.sourceWriteInFlight || state.remoteSyncOperation === "merge") {
+    if (required) throw new Error("Document is changing");
     return;
   }
   const refreshKind = documentStatusRefreshKind(state.currentDocument, status, {
@@ -9245,11 +9319,11 @@ async function checkDocumentStatus() {
     lastWrittenHash: state.lastWrittenHash,
   });
   if (refreshKind) {
-    await refreshCurrentDocument({ external: true, baselineOnly: refreshKind === "baseline" });
+    await refreshCurrentDocument({ external: true, baselineOnly: refreshKind === "baseline", required });
   }
 }
 
-async function refreshCurrentDocument({ external = false, remoteMerge = false, baselineOnly = false } = {}) {
+async function refreshCurrentDocument({ external = false, remoteMerge = false, baselineOnly = false, required = false } = {}) {
   const request = currentDocumentRequest();
   if (!request) {
     return;
@@ -9263,11 +9337,13 @@ async function refreshCurrentDocument({ external = false, remoteMerge = false, b
     }),
   );
   if (!response.ok) {
+    if (required) throw new Error("Unable to read current document");
     return;
   }
 
   const documentData = await response.json();
   if (!isCurrentDocumentRequest(request, documentData)) {
+    if (required && isCurrentDocumentRequest(request)) throw new Error("Invalid current document response");
     return;
   }
   if (baselineOnly) {
@@ -9463,7 +9539,7 @@ async function preparePdfExport() {
     }
   }
   chartTooltipController.hide();
-  setMode("preview", { persist: false, focus: false });
+  await setMode("preview", { persist: false, focus: false });
   await waitForPdfExportSurface();
   return {
     path: state.currentDocument.path,

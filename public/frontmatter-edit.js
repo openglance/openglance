@@ -8,6 +8,10 @@ export function frontmatterLineForValue(key, value) {
   return `${normalizedKey}: ${String(value ?? "").trim()}`;
 }
 
+export function frontmatterSourceSignature(source) {
+  return frontmatterBlockLines(source)?.lines.join("\n") ?? "";
+}
+
 export function frontmatterKeysFromSource(source) {
   const block = frontmatterBlockLines(source);
   if (!block) {

@@ -1,6 +1,6 @@
 import { createReadStream, watch } from "node:fs";
 import { spawn } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 
 import { BUILD_INFO } from "../build-info.mjs";
 import { decodeMarkdownLinkPath } from "../content/link-path.mjs";
-import { extractTitle, renderMarkdown } from "../content/markdown.mjs";
+import { extractTitle, extractDocumentTitle, renderMarkdown } from "../content/markdown.mjs";
 import {
   datasetReferencesFromMarkdown,
   renderMdxLiteRows,
@@ -126,6 +126,7 @@ export function createPreviewServer({
     repoRoot,
     initialFile,
     assetVersion,
+    treeScope: randomUUID(),
     toolVersionMonitor,
     restartSelf,
     gitRunner,
@@ -241,6 +242,7 @@ async function handleRequest(request, response, context) {
     requestUrl.pathname === "/pointer-resize.js" ||
     requestUrl.pathname === "/outline.js" ||
     requestUrl.pathname === "/tree-refresh.js" ||
+    requestUrl.pathname === "/refresh-policy.js" ||
     requestUrl.pathname === "/document-refresh.js" ||
     requestUrl.pathname === "/chart-tooltip.js" ||
     requestUrl.pathname === "/link-preview.js" ||
@@ -316,6 +318,9 @@ async function handleRequest(request, response, context) {
       head: repo.head,
       force: requestUrl.searchParams.get("refresh") === "1",
     });
+    const revision = context.treeCache.revision;
+    const version = `${context.treeScope}:${revision}`;
+    const unchanged = requestUrl.searchParams.get("version") === version && requestUrl.searchParams.get("refresh") !== "1";
     const frontmatterProfile = await frontmatterFilterProfile(repo.root);
     sendJson(response, 200, {
       repo: repo.id,
@@ -323,8 +328,9 @@ async function handleRequest(request, response, context) {
       detached: repo.detached,
       canEdit: canEditRepository({ repo, isLocalRequest: canEditRequest(request, context) }),
       frontmatterAllowedKeys: frontmatterProfile.allowedKeys,
-      revision: context.treeCache.revision,
-      tree,
+      revision,
+      version,
+      ...(unchanged ? { unchanged: true } : { tree }),
     });
     return;
   }
@@ -1051,7 +1057,9 @@ async function requestRepository(requestUrl, context) {
     notFound.statusCode = 404;
     throw notFound;
   }
-  return withRuntimeBranch(context.repository);
+  return withRuntimeBranch(context.repository, {
+    includeLinks: !["/api/tree", "/api/worktrees", "/api/git-status", "/api/document-status", "/api/watch"].includes(requestUrl.pathname),
+  });
 }
 
 async function localRequestRepository(request, requestUrl, context) {
@@ -1091,7 +1099,7 @@ function publicWorktree(worktree) {
   };
 }
 
-async function withRuntimeBranch(repo) {
+async function withRuntimeBranch(repo, { includeLinks = true } = {}) {
   const branch = await currentBranchOrFallback(repo);
   const head = await currentHead(repo.root).catch(() => repo.head ?? "");
   return {
@@ -1099,7 +1107,7 @@ async function withRuntimeBranch(repo) {
     branch,
     detached: !branch,
     head,
-    githubBlobRoot: await githubBlobRoot(repo.root, branch || head) ?? repo.githubBlobRoot,
+    ...(includeLinks ? { githubBlobRoot: await githubBlobRoot(repo.root, branch || head) ?? repo.githubBlobRoot } : {}),
   };
 }
 
@@ -1246,6 +1254,7 @@ export async function documentPayload(
     canEdit,
     path: documentPath.relativePath,
     title: extractTitle(source, documentPath.relativePath),
+    treeTitle: extractDocumentTitle(source),
     html,
     sourceHash: hashSource(source),
     dependencyHash,
@@ -1842,7 +1851,7 @@ async function streamDocumentWatch(request, response, repo, file, context) {
       return;
     }
     try {
-      const currentRepo = await withRuntimeBranch(repo);
+      const currentRepo = await withRuntimeBranch(repo, { includeLinks: false });
       const payload = await documentStatusPayload(currentRepo, documentPath.relativePath, {
         gitRunner: context.gitRunner,
         canEdit: canEditRepository({
@@ -1859,12 +1868,15 @@ async function streamDocumentWatch(request, response, repo, file, context) {
       );
     }
   };
-  const watcher = watch(documentPath.absolutePath, { persistent: false }, () => {
+  const watcher = watch(path.dirname(documentPath.absolutePath), { persistent: false }, (_event, name) => {
+    if (name && String(name) !== path.basename(documentPath.absolutePath)) return;
     if (changeTimer) {
       clearTimeout(changeTimer);
     }
     changeTimer = setTimeout(sendChange, 40);
   });
+
+  watcher.on("error", () => response.end());
 
   request.on("close", () => {
     closed = true;
@@ -2075,7 +2087,7 @@ function sendHtml(response, body) {
 }
 
 function sendJson(response, statusCode, body) {
-  response.writeHead(statusCode, { "Content-Type": "application/json; charset=utf-8" });
+  response.writeHead(statusCode, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
   response.end(JSON.stringify(body));
 }
 

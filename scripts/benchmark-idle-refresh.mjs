@@ -8,17 +8,24 @@ import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
+import { LOCAL_STATE_INTERVAL_MS, documentStatusIntervalMs } from "../public/refresh-policy.js";
 
 const { values } = parseArgs({ options: {
   repo: { type: "string" },
   file: { type: "string", default: "README.md" },
   "source-root": { type: "string", default: path.dirname(path.dirname(fileURLToPath(import.meta.url))) },
-  "duration-ms": { type: "string", default: "16000" },
+  "duration-ms": { type: "string", default: "60000" },
+  mode: { type: "string", default: "preview" },
+  "tree-interval-ms": { type: "string" },
+  "document-interval-ms": { type: "string" },
 } });
 if (!values.repo) throw new Error("Usage: node scripts/benchmark-idle-refresh.mjs --repo <local-repo> [--file README.md] [--source-root <revision-checkout>]");
 const duration = Number(values["duration-ms"]);
+const treeInterval = Number(values["tree-interval-ms"] ?? LOCAL_STATE_INTERVAL_MS);
+const documentInterval = Number(values["document-interval-ms"] ?? documentStatusIntervalMs(values.mode));
+if (![treeInterval, documentInterval].every(v => Number.isFinite(v) && v >= 1000)) throw new Error("Intervals must be at least one second");
 if (!Number.isFinite(duration) || duration < 1000 || duration > 60_000) throw new Error("duration-ms must be 1000–60000");
-const counts = { lstat: 0, stat: 0, readFile: 0, git: 0, discoveries: 0 };
+const counts = { lstat: 0, stat: 0, readFile: 0, git: 0, discoveries: 0, bytes: 0 };
 for (const method of ["lstat", "stat", "readFile"]) {
   const original = fs.promises[method];
   fs.promises[method] = function (...args) { counts[method]++; return original.apply(this, args); };
@@ -41,12 +48,19 @@ const server = createPreviewServer({ repoRoot, repository });
 await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
 const baseUrl = `http://127.0.0.1:${server.address().port}`;
 let requests = {};
+let treeVersion = null;
 async function get(endpoint) {
   const pathname = new URL(endpoint, baseUrl).pathname;
   requests[pathname] = (requests[pathname] ?? 0) + 1;
-  const response = await fetch(baseUrl + endpoint);
+  const url = new URL(endpoint, baseUrl);
+  if (pathname === "/api/tree" && treeVersion) url.searchParams.set("version", treeVersion);
+  const response = await fetch(url);
   if (!response.ok) throw new Error(`${pathname}: ${response.status}`);
-  return response.json();
+  const body = await response.text();
+  counts.bytes += Buffer.byteLength(body);
+  const payload = JSON.parse(body);
+  if (pathname === "/api/tree") treeVersion = payload.version;
+  return payload;
 }
 function start() {
   requests = {};
@@ -68,17 +82,24 @@ try {
   before = start();
   const pending = [];
   const enqueue = (task) => pending.push(task.catch(error => ({ error })));
-  const treeTimer = setInterval(() => enqueue((async () => {
-    await get("/api/worktrees");
-    await get("/api/tree");
-    await get("/api/git-status");
-  })()), 5000);
-  const statusTimer = setInterval(() => enqueue(get(`/api/document-status?file=${encodeURIComponent(values.file)}`)), 2000);
-  await delay(duration);
-  clearInterval(treeTimer);
-  clearInterval(statusTimer);
+  const phaseStarted = performance.now();
+  async function schedule(interval, callback) {
+    for (let offset = 0; offset < duration; offset += interval) {
+      const wait = phaseStarted + offset - performance.now();
+      if (wait > 0) await delay(wait);
+      enqueue(callback());
+    }
+  }
+  await Promise.all([
+    schedule(treeInterval, async () => {
+      await get("/api/worktrees");await get("/api/tree");await get("/api/git-status");
+    }),
+    schedule(documentInterval, () => get(`/api/document-status?file=${encodeURIComponent(values.file)}`)),
+  ]);
+  const remaining = phaseStarted + duration - performance.now();
+  if (remaining > 0) await delay(remaining);
   for (const result of await Promise.all(pending)) if (result?.error) throw result.error;
-  end(`${duration}ms-visible-cadence`, before);
+  end(`${duration}ms-${values.mode}-${treeInterval}-${documentInterval}`, before);
 } finally {
   server.closeAllConnections();
   await new Promise(resolve => server.close(resolve));

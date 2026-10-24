@@ -30,3 +30,14 @@ test("hasTreeChanged refreshes a visible document title without changing its pat
 
   assert.equal(hasTreeChanged(previous, next), true);
 });
+
+test("successful local title edits update only their existing tree entry without file discovery", async () => {
+  const { updateTreeDocumentTitle } = await import("../public/tree-refresh.js");
+  const tree = [{ type: "directory", name: "docs", children: [{ type: "file", path: "docs/a.md", title: "Old" }] }];
+  assert.equal(updateTreeDocumentTitle(tree, "docs/a.md", "New"), true);
+  assert.equal(tree[0].children[0].title, "New");
+  assert.equal(updateTreeDocumentTitle(tree, "docs/a.md", "New"), false);
+  assert.equal(updateTreeDocumentTitle(tree, "docs/a.md", ""), true);
+  assert.equal(tree[0].children[0].title, undefined);
+  assert.equal(updateTreeDocumentTitle(tree, "missing.md", "Unknown"), false);
+});

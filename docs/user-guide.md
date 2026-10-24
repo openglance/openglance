@@ -113,6 +113,20 @@ excluded from tree search rather than becoming invisible search fields. When a s
 expansion, the floating window keeps the filename and title above the complete highlighted summary
 instead of replacing them.
 
+### Refresh while reading
+
+Preview checks file lists, displayed titles, search metadata, worktrees, local Git status and fallback
+document changes about once a minute. Ordinary changes to the current file still arrive through file
+events. A commit, MDX data change or missed event may take up to about a minute under normal scheduling.
+Click **Refresh now** (↻) in the top bar to initiate an immediate local check, or refocus the window.
+Hidden windows pause local checks and catch up when shown again. Actual completion depends on the
+repository and system load.
+
+Before entering Source or Live, OpenGlance checks the current document and keeps the editor unavailable
+until that check succeeds. Both editors retain two-second external-change checks and save local edits
+after a short typing pause. Switching modes flushes pending writes. Your own file operations and sync
+results update promptly; these reading intervals do not delay a save or publish action.
+
 ### Read with source references
 
 Preview renders the document and keeps its original source line numbers. The outline follows H1–H5
