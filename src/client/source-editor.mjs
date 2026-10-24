@@ -63,6 +63,7 @@ import { createTranslator } from "../../public/i18n.js";
 
 const livePreviewEnterEffect = StateEffect.define();
 const livePreviewExitEffect = StateEffect.define();
+const liveCompositionEffect = StateEffect.define();
 const sourceEditorSetup = [
   minimalSetup,
   lineNumbers(),
@@ -494,6 +495,20 @@ const liveEditingSuppression = StateField.define({
   },
 });
 
+const liveCompositionState = StateField.define({
+  create() {
+    return false;
+  },
+  update(isComposing, transaction) {
+    for (const effect of transaction.effects) {
+      if (effect.is(liveCompositionEffect)) {
+        isComposing = effect.value === true;
+      }
+    }
+    return isComposing;
+  },
+});
+
 const liveMarkdownDecorations = StateField.define({
   create(state) {
     return buildLiveMarkdownDecorations(state);
@@ -503,7 +518,18 @@ const liveMarkdownDecorations = StateField.define({
     const activeLineSuppressed = transaction.state.field(liveEditingSuppression, false);
     const activeLineSuppressionChanged =
       transaction.startState.field(liveEditingSuppression, false) !== activeLineSuppressed;
-    if (transaction.docChanged || selectionChanged || activeLineSuppressionChanged) {
+    const previousComposition = transaction.startState.field(
+      liveCompositionState,
+      false,
+    );
+    const activeComposition = transaction.state.field(liveCompositionState, false);
+    if (liveMarkdownDecorationsNeedRebuild({
+      docChanged: transaction.docChanged,
+      selectionChanged,
+      activeLineSuppressionChanged,
+      activeComposition,
+      compositionChanged: previousComposition !== activeComposition,
+    })) {
       return buildLiveMarkdownDecorations(transaction.state, {
         suppressActiveLine: activeLineSuppressed,
       });
@@ -1143,6 +1169,7 @@ export function createSourceEditor({
   let currentTheme = themeFromInput(theme);
   let currentEditable = true;
   let remoteMergeHighlightTimer = null;
+  let compositionEndTimer = null;
   let view = null;
   const editorDocument = parent?.ownerDocument ?? globalThis.document;
   const themeCompartment = new Compartment();
@@ -1178,6 +1205,7 @@ export function createSourceEditor({
           liveTableInteractionFacet.of(tableInteraction),
           liveMdxComponentInteractionFacet.of(componentInteraction),
           liveEditingSuppression,
+          liveCompositionState,
           liveMarkdownDecorations,
           liveMarkdownThemeForTheme(currentTheme),
         ]
@@ -1224,6 +1252,9 @@ export function createSourceEditor({
       }),
       EditorView.domEventHandlers({
         keydown(event, eventView) {
+          if (event.isComposing || eventView.compositionStarted) {
+            return false;
+          }
           if (
             (currentMode === "source" || currentMode === "live") &&
             event.key === "/" &&
@@ -1276,21 +1307,54 @@ export function createSourceEditor({
           });
           return false;
         },
+        compositionstart(_event, eventView) {
+          if (currentMode !== "live") {
+            return false;
+          }
+          globalThis.clearTimeout(compositionEndTimer);
+          compositionEndTimer = null;
+          setLiveCompositionState(eventView, true);
+          return false;
+        },
+        compositionupdate(_event, eventView) {
+          if (currentMode === "live") {
+            setLiveCompositionState(eventView, true);
+          }
+          return false;
+        },
+        compositionend(_event, eventView) {
+          globalThis.clearTimeout(compositionEndTimer);
+          compositionEndTimer = globalThis.setTimeout(() => {
+            compositionEndTimer = null;
+            if (currentMode === "live" && !eventView.compositionStarted) {
+              setLiveCompositionState(eventView, false);
+            }
+          }, 0);
+          return false;
+        },
         paste(event, eventView) {
+          if (shouldUseNativePasteDuringComposition(event, eventView)) {
+            return false;
+          }
+          const plainText = event.clipboardData?.getData("text/plain") ?? "";
           const imageFile = clipboardImageFile(event.clipboardData);
           if (!imageFile || typeof onPasteImage !== "function") {
-            const text = pastedTextLinkCandidate(event.clipboardData?.getData("text/plain"));
+            const text = pastedTextLinkCandidate(plainText);
             if (!text || typeof onPasteText !== "function") {
               return false;
             }
 
             event.preventDefault();
-            void pasteTextAsLinkIntoEditor(eventView, text, onPasteText);
+            void pasteTextAsLinkIntoEditor(eventView, text, onPasteText, {
+              fallbackText: currentEditable ? plainText : "",
+            });
             return true;
           }
 
           event.preventDefault();
-          void pasteImageIntoEditor(eventView, imageFile, onPasteImage);
+          void pasteImageIntoEditor(eventView, imageFile, onPasteImage, {
+            fallbackText: currentEditable ? plainText : "",
+          });
           return true;
         },
       }),
@@ -1667,6 +1731,7 @@ export function createSourceEditor({
     },
     destroy() {
       globalThis.clearTimeout(remoteMergeHighlightTimer);
+      globalThis.clearTimeout(compositionEndTimer);
       tableInteraction.commitEditor();
       tableInteraction.destroy();
       componentInteraction.destroy();
@@ -2052,7 +2117,12 @@ export function createLiveMdxComponentInteraction({
   };
 
   const handleKeyDown = (event) => {
-    if (getMode() !== "live" || event.key !== "Escape" || !selection) {
+    if (
+      event.isComposing
+      || getMode() !== "live"
+      || event.key !== "Escape"
+      || !selection
+    ) {
       return false;
     }
     event.preventDefault();
@@ -3012,6 +3082,7 @@ export function createLiveTableInteraction({
 
   const handleKeyDown = (event) => {
     if (
+      event.isComposing ||
       getMode() !== "live" ||
       event.key !== "Escape" ||
       !selection ||
@@ -3626,10 +3697,30 @@ export function clipboardImageFile(clipboardData) {
   return null;
 }
 
-async function pasteImageIntoEditor(view, imageFile, onPasteImage) {
+export function shouldUseNativePasteDuringComposition(event = {}, view = {}) {
+  return event.isComposing === true || view.compositionStarted === true;
+}
+
+function setLiveCompositionState(view, active) {
+  const current = view.state.field(liveCompositionState, false);
+  if (current === active) {
+    return;
+  }
+  view.dispatch({ effects: liveCompositionEffect.of(active) });
+}
+
+async function pasteImageIntoEditor(
+  view,
+  imageFile,
+  onPasteImage,
+  { fallbackText = "" } = {},
+) {
   try {
     const tag = await onPasteImage(imageFile);
     if (!tag) {
+      if (fallbackText) {
+        insertTextAtSelection(view, fallbackText);
+      }
       view.focus();
       return;
     }
@@ -3637,11 +3728,19 @@ async function pasteImageIntoEditor(view, imageFile, onPasteImage) {
     insertTextAtSelection(view, pastedImageInsertionText(view.state, String(tag)));
     view.focus();
   } catch {
+    if (fallbackText) {
+      insertTextAtSelection(view, fallbackText);
+    }
     view.focus();
   }
 }
 
-async function pasteTextAsLinkIntoEditor(view, text, onPasteText) {
+async function pasteTextAsLinkIntoEditor(
+  view,
+  text,
+  onPasteText,
+  { fallbackText = "" } = {},
+) {
   try {
     const replacement = await onPasteText(text, {
       selectedText: view.state.sliceDoc(
@@ -3650,6 +3749,9 @@ async function pasteTextAsLinkIntoEditor(view, text, onPasteText) {
       ),
     });
     if (!replacement) {
+      if (fallbackText) {
+        insertTextAtSelection(view, fallbackText);
+      }
       view.focus();
       return;
     }
@@ -3657,6 +3759,9 @@ async function pasteTextAsLinkIntoEditor(view, text, onPasteText) {
     insertTextAtSelection(view, String(replacement));
     view.focus();
   } catch {
+    if (fallbackText) {
+      insertTextAtSelection(view, fallbackText);
+    }
     view.focus();
   }
 }
@@ -4063,6 +4168,24 @@ export function nextLiveEditingSuppression(
     return false;
   }
   return isSuppressed;
+}
+
+export function liveMarkdownDecorationsNeedRebuild({
+  docChanged = false,
+  selectionChanged = false,
+  activeLineSuppressionChanged = false,
+  activeComposition = false,
+  compositionChanged = false,
+} = {}) {
+  if (activeComposition) {
+    return false;
+  }
+  return (
+    docChanged
+    || selectionChanged
+    || activeLineSuppressionChanged
+    || compositionChanged
+  );
 }
 
 export function listItemIndentChange(text, direction, { step = 2 } = {}) {

@@ -8432,7 +8432,7 @@ function sameStringArray(left, right) {
 }
 
 function handleDocumentKeydown(event) {
-  if (!repositoryPanel.hidden) {
+  if (event.isComposing || event.keyCode === 229 || !repositoryPanel.hidden) {
     return;
   }
   if (event.key === "Escape" && !agentContextPopover.hidden) {
