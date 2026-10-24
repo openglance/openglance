@@ -91,6 +91,104 @@ test("editing a cell preserves native input clicks and upgrades a cross-cell dra
   await nextTask();
 });
 
+test("editing a long cell keeps soft wrapping and grows with its column", async () => {
+  const fixture = liveTableFixture();
+  const cell = fixture.cell(1, 1);
+
+  fixture.interaction.handlePointerDown(pointerEvent(cell, {
+    pointerId: 30,
+    clientX: 280,
+    clientY: 260,
+  }));
+  fixture.interaction.handlePointerUp(pointerEvent(cell, {
+    pointerId: 30,
+    clientX: 280,
+    clientY: 260,
+  }));
+
+  const editor = cell.querySelector(".cm-live-table-cell-editor");
+  assert.ok(editor);
+  assert.equal(editor.tagName, "TEXTAREA");
+  assert.equal(editor.getAttribute("rows"), "1");
+  assert.equal(editor.getAttribute("wrap"), "soft");
+
+  editor.value = "first line\r\nsecond line with enough text to wrap";
+  editor.selectionStart = editor.value.length;
+  editor.selectionEnd = editor.value.length;
+  editor.scrollHeight = 72;
+  editor.dispatchEvent({ type: "input" });
+
+  assert.equal(
+    editor.value,
+    "first line\nsecond line with enough text to wrap",
+  );
+  assert.equal(editor.style.height, "72px");
+  assert.equal(editor.selectionStart, editor.value.length);
+  assert.equal(editor.selectionEnd, editor.value.length);
+});
+
+test("Shift+Enter inserts and persists a table-safe cell line break", async () => {
+  const fixture = liveTableFixture();
+  const cell = fixture.cell(1, 1);
+
+  fixture.interaction.handlePointerDown(pointerEvent(cell, {
+    pointerId: 31,
+    clientX: 280,
+    clientY: 260,
+  }));
+  fixture.interaction.handlePointerUp(pointerEvent(cell, {
+    pointerId: 31,
+    clientX: 280,
+    clientY: 260,
+  }));
+
+  const editor = cell.querySelector(".cm-live-table-cell-editor");
+  assert.ok(editor);
+  editor.value = "firstsecond";
+  editor.setSelectionRange(5, 5);
+  const lineBreakEvent = {
+    ...keyEvent("Enter"),
+    shiftKey: true,
+  };
+  editor.dispatchEvent(lineBreakEvent);
+
+  assert.equal(lineBreakEvent.defaultPrevented, true);
+  assert.equal(editor.value, "first\nsecond");
+  assert.equal(editor.selectionStart, 6);
+  assert.equal(editor.selectionEnd, 6);
+  assert.equal(cell.querySelector(".cm-live-table-cell-editor"), editor);
+
+  editor.dispatchEvent(keyEvent("Enter"));
+  await nextTask();
+  assert.match(
+    fixture.view.state.doc.toString(),
+    /\| A1 \| first<br>second \| C1 \|/,
+  );
+});
+
+test("existing table line breaks reopen as editable newlines", () => {
+  const fixture = liveTableFixture({
+    source: tableSource.replace("B1", "first<br>second"),
+  });
+  const cell = fixture.cell(1, 1);
+
+  fixture.interaction.handlePointerDown(pointerEvent(cell, {
+    pointerId: 32,
+    clientX: 280,
+    clientY: 260,
+  }));
+  fixture.interaction.handlePointerUp(pointerEvent(cell, {
+    pointerId: 32,
+    clientX: 280,
+    clientY: 260,
+  }));
+
+  assert.equal(
+    cell.querySelector(".cm-live-table-cell-editor")?.value,
+    "first\nsecond",
+  );
+});
+
 test("releasing an editor-originated pointer outside the editor ends the pending table gesture", async () => {
   const fixture = liveTableFixture();
   const origin = fixture.cell(1, 1);
@@ -399,7 +497,7 @@ test("only a vertical multi-cell range qualifies for column reordering", () => {
   }), false);
 });
 
-function liveTableFixture() {
+function liveTableFixture({ source = tableSource } = {}) {
   const document = new FakeDocument();
   const root = document.createElement("div");
   const container = document.createElement("div");
@@ -479,7 +577,7 @@ function liveTableFixture() {
 
   const view = {
     dom: root,
-    state: EditorState.create({ doc: tableSource }),
+    state: EditorState.create({ doc: source }),
     dispatch(spec) {
       this.state = this.state.update(spec).state;
     },

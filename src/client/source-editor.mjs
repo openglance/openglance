@@ -2428,6 +2428,60 @@ export function createLiveTableInteraction({
     };
   };
 
+  const resizeCellEditor = (editor) => {
+    editor.style.height = "auto";
+    const contentHeight = Number(editor.scrollHeight);
+    if (Number.isFinite(contentHeight) && contentHeight > 0) {
+      editor.style.height = `${Math.ceil(contentHeight)}px`;
+    }
+  };
+
+  const normalizeCellEditorValue = (value) => (
+    String(value ?? "").replace(/\r\n?/g, "\n")
+  );
+
+  const cellSourceToEditorValue = (value) => (
+    normalizeCellEditorValue(value).replace(/<br\s*\/?>/gi, "\n")
+  );
+
+  const cellEditorValueToSource = (value) => (
+    normalizeCellEditorValue(value).replace(/\n/g, "<br>")
+  );
+
+  const updateCellEditor = (editor) => {
+    const value = String(editor.value ?? "");
+    const normalized = normalizeCellEditorValue(value);
+    if (normalized !== value) {
+      const selectionStart = editor.selectionStart;
+      const selectionEnd = editor.selectionEnd;
+      editor.value = normalized;
+      if (
+        Number.isInteger(selectionStart) &&
+        Number.isInteger(selectionEnd) &&
+        typeof editor.setSelectionRange === "function"
+      ) {
+        editor.setSelectionRange(
+          normalizeCellEditorValue(value.slice(0, selectionStart)).length,
+          normalizeCellEditorValue(value.slice(0, selectionEnd)).length,
+        );
+      }
+    }
+    resizeCellEditor(editor);
+  };
+
+  const insertCellEditorLineBreak = (editor) => {
+    const value = String(editor.value ?? "");
+    const start = Number.isInteger(editor.selectionStart)
+      ? editor.selectionStart
+      : value.length;
+    const end = Number.isInteger(editor.selectionEnd)
+      ? editor.selectionEnd
+      : start;
+    editor.value = `${value.slice(0, start)}\n${value.slice(end)}`;
+    editor.setSelectionRange?.(start + 1, start + 1);
+    updateCellEditor(editor);
+  };
+
   const beginCellEditor = () => {
     if (!isEditable() || getMode() !== "live" || !selection) {
       return false;
@@ -2452,11 +2506,12 @@ export function createLiveTableInteraction({
       return false;
     }
 
-    const input = documentRoot.createElement("input");
-    input.type = "text";
+    const input = documentRoot.createElement("textarea");
     input.className = "cm-live-table-cell-editor";
-    input.value = sourceCell.content;
+    input.value = cellSourceToEditorValue(sourceCell.content);
     input.setAttribute("aria-label", translate("cell.edit"));
+    input.setAttribute("rows", "1");
+    input.setAttribute("wrap", "soft");
     input.autocomplete = "off";
     input.spellcheck = false;
     const editor = {
@@ -2477,7 +2532,15 @@ export function createLiveTableInteraction({
     input.addEventListener("pointerdown", stopPointerPropagation);
     input.addEventListener("mousedown", stopPointerPropagation);
     input.addEventListener("click", stopPointerPropagation);
+    input.addEventListener("input", () => updateCellEditor(input));
     input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && event.shiftKey) {
+        event.preventDefault();
+        event.stopPropagation();
+        insertCellEditorLineBreak(input);
+        return;
+      }
+
       if (!["Escape", "Enter", "Tab"].includes(event.key)) {
         event.stopPropagation();
         return;
@@ -2504,6 +2567,7 @@ export function createLiveTableInteraction({
     });
     input.focus({ preventScroll: true });
     input.setSelectionRange(input.value.length, input.value.length);
+    updateCellEditor(input);
     scheduleRefresh();
     return true;
   };
@@ -2529,7 +2593,7 @@ export function createLiveTableInteraction({
       block.source,
       editor.row,
       editor.column,
-      editor.input.value,
+      cellEditorValueToSource(editor.input.value),
     );
     if (!replacement) {
       restoreEditorCell(editor);
