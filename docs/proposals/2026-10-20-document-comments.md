@@ -237,16 +237,23 @@ Mermaid, images, and MDX component internals are deferred.
 
 | Surface | Proposed behavior |
 | --- | --- |
-| Preview | Keep the body read-only; a selection action creates a comment, and a restrained range marker opens its thread |
+| Preview | Keep the body read-only; a selection action creates a comment, and a restrained range marker opens an unresolved thread; resolving removes that thread's body decorations completely |
 | Comments panel | Show quote, attribution, messages, reply and resolution actions, and proposed revision locations; filter open, resolved, and comments needing location |
 | Live | Use the same thread data and panel, coordinating comment writes with the active source buffer |
 | Source | Expose the original data as editable source, optionally folding record blocks wherever they occur; retain actual file line numbers |
 | Narrow window | Present the same panel as a drawer with a way back to its passage |
 
-The panel should share the existing right-side space with Agent Context, with an explicit switch if
-needed. Existing copy and Agent Context actions remain available. Selected comments can be copied with
-their quotes and IDs for an agent; raw file access remains sufficient. Do not copy every resolved
+The selected UI direction is a persistent right-side Comments panel, while Agent Context retains its
+existing left-sidebar position. Existing copy and Agent Context actions remain available. Selected
+comments can be copied with their quotes and IDs for an agent; raw file access remains sufficient. Do not copy every resolved
 discussion into ordinary body selections by default.
+
+Resolving a thread restores its passage to normal reading: remove the associated comment highlights,
+range markers, pins, anchored bubbles, and any open quote-comparison overlay from the body. Do not leave
+a faded marker behind. The original quotation and messages remain accessible through resolved comments
+in the panel. Inspecting that history does not restore body decorations; explicitly reopening the
+thread can restore its unresolved marker when its anchor is located. Other unresolved threads retain
+their own presentation.
 
 Render messages as inert, sanitized Markdown using bounded local document-link behavior. A comment
 must not execute HTML, JSX, scripts, event handlers, shell commands, or automatic agent actions. Reading
@@ -322,6 +329,10 @@ Every mutation retains the existing local-only editing and detached-worktree pro
 boundaries. A comment is an ordinary unpublished file edit. Existing Sync and publish commits and
 pushes it; merely creating or replying to a comment never commits or pushes automatically.
 
+Resolving and reopening also only save local file changes. These actions do not trigger Sync, a
+commit, a push, or publication. Sharing the updated status requires a separate user-initiated
+Sync and publish action.
+
 Comments follow branch/file copies and Git merges. Conflicts remain normal Git conflicts, including
 two people appending to EOF or editing one thread. Do not install a union merge driver or automatically
 pick one status/message list. Unknown, duplicate, or conflicted records remain visible for repair.
@@ -380,6 +391,9 @@ The following end-to-end regressions are mandatory prototype/implementation gate
 - Type a body edit in Source and Live, receive an external comment/reply, then Undo, Redo, and save.
   Retain the incoming discussion and map local edits correctly. Repeat with a panel action and with
   overlapping raw-record edits, preserving input when a conflict prevents safe reconciliation.
+- Resolve a thread and verify that its passage has no remaining comment decoration, including an
+  already open comparison or anchored bubble. Retain its history in the panel, keep the status change
+  unpublished, and verify that reopening restores the appropriate unresolved marker without publishing.
 - Accept a comment after remote-merge preparation and verify invalidation/repreparation. Attempt
   comment writes during apply and rollback through both the UI and server/helper seam; defer them
   without losing drafts or corrupting the verified workspace. After a frozen publication commit,
