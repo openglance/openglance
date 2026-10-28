@@ -23,6 +23,7 @@ function stableSyncGuard() {
 
 function syncSelectedFiles(options) {
   return syncSelectedFilesImpl({
+    mutationGuard: async (_root, action) => action(),
     syncGuard: stableSyncGuard(),
     ...options,
   });
@@ -628,10 +629,11 @@ test("syncSelectedFiles retries preparation once when content changes during fet
   ];
   const calls = [];
   const result = await syncSelectedFilesImpl({
+    mutationGuard: async (_root, action) => action(),
     repo: REPO,
     files: ["docs/changed.md"],
     syncGuard: {
-      capture: async () => captures.shift(),
+      capture: async () => captures.length > 1 ? captures.shift() : captures[0],
       currentHead: async () => TEST_HEAD,
       isWorktreeClean: async () => true,
     },
@@ -657,6 +659,7 @@ test("syncSelectedFiles retries preparation once when content changes during fet
 test("all-change sync commits the frozen index instead of rereading worktree paths", async () => {
   const calls = [];
   const result = await syncSelectedFilesImpl({
+    mutationGuard: async (_root, action) => action(),
     repo: REPO,
     allChanges: true,
     syncGuard: stableSyncGuard(),
@@ -688,10 +691,11 @@ test("syncSelectedFiles stops before staging when the workspace changes twice", 
   ];
   const calls = [];
   const result = await syncSelectedFilesImpl({
+    mutationGuard: async (_root, action) => action(),
     repo: REPO,
     files: ["docs/changed.md"],
     syncGuard: {
-      capture: async () => captures.shift(),
+      capture: async () => captures.length > 1 ? captures.shift() : captures[0],
       currentHead: async () => TEST_HEAD,
       isWorktreeClean: async () => true,
     },
@@ -716,6 +720,7 @@ test("syncSelectedFiles stops before staging when the workspace changes twice", 
 test("syncSelectedFiles never rebases a worktree that changed after commit", async () => {
   const calls = [];
   const result = await syncSelectedFilesImpl({
+    mutationGuard: async (_root, action) => action(),
     repo: REPO,
     files: ["docs/changed.md"],
     syncGuard: {

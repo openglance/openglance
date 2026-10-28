@@ -440,6 +440,8 @@
               <span class="document-deletions-toggle-mark" aria-hidden="true">ab</span>
               <span class="visually-hidden" data-document-deletions-label data-i18n="action.showDeletedChanges">显示删除内容</span>
             </button>
+            <button id="comment-selection" type="button" hidden>添加评论</button>
+            <button id="document-comments-toggle" type="button" aria-expanded="false" hidden>评论</button>
             <button id="document-favorite-toggle" class="document-favorite-toggle" type="button" aria-label="收藏文档" aria-pressed="false">
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="m12 3.6 2.55 5.17 5.7.83-4.13 4.02.98 5.68L12 16.62 6.9 19.3l.98-5.68L3.75 9.6l5.7-.83L12 3.6Z"></path>
@@ -500,8 +502,10 @@
                 <div id="source-editor" class="source-editor"></div>
               </section>
             </div>
+            <aside id="document-comments" class="document-comments" aria-label="Document comments" hidden></aside>
           </div>
           <div id="selection-popover" class="selection-popover" hidden>
+            <button id="add-selection-comment" type="button">添加评论 / Comment</button>
             <button id="copy-selection-popover" type="button" data-i18n="action.copyContent">复制内容</button>
             <button id="add-selection-agent-context" type="button" data-i18n="action.addToContext">加入上下文</button>
           </div>

@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-16
+last_updated: 2026-10-28
 ---
 
 # OpenGlance
@@ -57,6 +57,7 @@ automatically save edits.
   an off-by-default control for struck-through deletions while the existing current-document line numbers
   stay unchanged. A new untracked document remains an ordinary readable document while Sync identifies it
   as unpublished. This is a lightweight editing trace, not a developer-oriented Git diff.
+- **Discussion in the document.** On `.md` files, select text or source lines and use the right Comments panel to create, reply, resolve, and reopen threads. Resolving restores the passage to normal; discussions stay in local Markdown until you publish manually. Agents read and write the same records.
 - **Precise context for agents.** Users can select source-backed lines from one file or combine content
   from multiple files, then copy portable Markdown context for an agent.
 - **Quiet updates, controlled publishing.** OpenGlance applies remote updates automatically when safe;

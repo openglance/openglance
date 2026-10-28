@@ -1,3 +1,4 @@
+import { withWorktreeMutation } from "./worktree-mutation.mjs";
 import { randomBytes } from "node:crypto";
 import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -263,44 +264,46 @@ export async function prepareRemoteChanges({
 
   const context = { repo, locale: translate.locale };
   try {
-    await assertNoGitOperationInProgress(context, gitRunner, operationPathExists);
-    const status = await runRemoteStep(repo, "status", gitRunner, [
-      "status",
-      "--porcelain=v1",
-      "-z",
-      "--untracked-files=all",
-    ]);
-    const changes = repositoryChangesFromPorcelain(status.stdout);
-    if (changes.length === 0) {
-      return await prepareCleanRemoteMerge({
+    return await withWorktreeMutation(repo.root, async () => {
+      await assertNoGitOperationInProgress(context, gitRunner, operationPathExists);
+      const status = await runRemoteStep(repo, "status", gitRunner, [
+        "status",
+        "--porcelain=v1",
+        "-z",
+        "--untracked-files=all",
+      ]);
+      const changes = repositoryChangesFromPorcelain(status.stdout);
+      if (changes.length === 0) {
+        return await prepareCleanRemoteMerge({
+          repo,
+          remote,
+          preparationStore,
+          translate,
+          gitRunner,
+        });
+      }
+      if (!allowLocalChanges) {
+        return remoteMergeFailure({
+          repo,
+          translate,
+          step: "confirm local changes",
+          error: translate("error.confirmLocalChanges"),
+          code: "local_changes_require_confirmation",
+          files: changes.map((change) => change.path),
+          includeAgentPrompt: false,
+          checkedAt: remote.checkedAt,
+          remote,
+        });
+      }
+      return await prepareDirtyRemoteMerge({
         repo,
         remote,
+        changes,
         preparationStore,
         translate,
         gitRunner,
+        snapshotCommandRunner,
       });
-    }
-    if (!allowLocalChanges) {
-      return remoteMergeFailure({
-        repo,
-        translate,
-        step: "confirm local changes",
-        error: translate("error.confirmLocalChanges"),
-        code: "local_changes_require_confirmation",
-        files: changes.map((change) => change.path),
-        includeAgentPrompt: false,
-        checkedAt: remote.checkedAt,
-        remote,
-      });
-    }
-    return await prepareDirtyRemoteMerge({
-      repo,
-      remote,
-      changes,
-      preparationStore,
-      translate,
-      gitRunner,
-      snapshotCommandRunner,
     });
   } catch (error) {
     return remoteMergeFailure({
@@ -345,56 +348,58 @@ export async function applyPreparedRemoteChanges({
   }
 
   try {
-    await assertNoGitOperationInProgress(
-      { repo, locale: translate.locale },
-      gitRunner,
-      operationPathExists,
-    );
-    const currentRemoteCommit = parseGitOid(
-      (await runRemoteStep(repo, "confirm remote version", gitRunner, [
-        "rev-parse",
-        "--verify",
-        preparation.remote.remoteRef,
-      ])).stdout,
-      "remote commit",
-    );
-    if (currentRemoteCommit !== preparation.remote.remoteCommit) {
-      return preparedRemoteMergeDriftFailure({
+    return await withWorktreeMutation(repo.root, async () => {
+      await assertNoGitOperationInProgress(
+        { repo, locale: translate.locale },
+        gitRunner,
+        operationPathExists,
+      );
+      const currentRemoteCommit = parseGitOid(
+        (await runRemoteStep(repo, "confirm remote version", gitRunner, [
+          "rev-parse",
+          "--verify",
+          preparation.remote.remoteRef,
+        ])).stdout,
+        "remote commit",
+      );
+      if (currentRemoteCommit !== preparation.remote.remoteCommit) {
+        return preparedRemoteMergeDriftFailure({
+          repo,
+          preparation,
+          translate,
+          code: "remote_changed",
+        });
+      }
+      const guard = createGitSyncGuard({ repo, gitRunner });
+      const current = await guard.capture();
+      if (syncStateDriftKind(preparation.baseline, current) !== "none") {
+        return preparedRemoteMergeDriftFailure({
+          repo,
+          preparation,
+          translate,
+          code: "workspace_changed",
+        });
+      }
+      if (preparation.kind === "clean") {
+        await runRemoteStep(repo, "fast-forward", gitRunner, [
+          "merge",
+          "--ff-only",
+          preparation.remote.remoteCommit,
+        ]);
+        return successfulRemoteMerge({
+          remote: preparation.remote,
+          changes: [],
+          mode: "fast_forward",
+        });
+      }
+      return await applyPreparedDirtyRemoteMerge({
         repo,
         preparation,
         translate,
-        code: "remote_changed",
+        gitRunner,
+        snapshotCommandRunner,
+        guard,
       });
-    }
-    const guard = createGitSyncGuard({ repo, gitRunner });
-    const current = await guard.capture();
-    if (syncStateDriftKind(preparation.baseline, current) !== "none") {
-      return preparedRemoteMergeDriftFailure({
-        repo,
-        preparation,
-        translate,
-        code: "workspace_changed",
-      });
-    }
-    if (preparation.kind === "clean") {
-      await runRemoteStep(repo, "fast-forward", gitRunner, [
-        "merge",
-        "--ff-only",
-        preparation.remote.remoteCommit,
-      ]);
-      return successfulRemoteMerge({
-        remote: preparation.remote,
-        changes: [],
-        mode: "fast_forward",
-      });
-    }
-    return await applyPreparedDirtyRemoteMerge({
-      repo,
-      preparation,
-      translate,
-      gitRunner,
-      snapshotCommandRunner,
-      guard,
     });
   } catch (error) {
     return remoteMergeFailure({

@@ -5815,3 +5815,32 @@ tr:last-child td {
 .link-preview .link-preview-close { flex: none; margin-left: auto; color: var(--muted); font-size: 20px; line-height: 1; padding: 0 4px; }
 .link-preview-open { color: var(--accent); margin-left: auto; text-decoration: none; }
 .link-preview button:focus-visible, .link-preview a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 3px; }
+
+/* Document discussion rail; opening it leaves Agent Context in the left sidebar. */
+.document-body.has-comments { grid-template-columns: minmax(0, 1fr) minmax(280px, 320px); }
+.document-body.has-outline.has-comments { grid-template-columns: var(--document-outline-width) var(--document-outline-resizer-hit-width) minmax(0, 1fr) minmax(280px, 320px); }
+.document-body.has-outline.is-outline-collapsed.has-comments { grid-template-columns: minmax(0, 1fr) minmax(280px, 320px); }
+.document-comments { min-width: 0; min-height: 0; overflow: auto; padding: 16px; background: var(--panel); border-left: 1px solid var(--panel-border); font-size: 13px; }
+.document-comments[hidden] { display: none; }
+.document-comments header { display: flex; justify-content: space-between; align-items: center; font-size: 16px; }
+.document-comments button { padding: 5px 8px; border: 1px solid var(--panel-border); border-radius: 6px; background: var(--bg); color: var(--text); cursor: pointer; }
+.document-comments button:disabled { opacity: .5; cursor: default; }
+.comment-filters { display: flex; gap: 5px; margin: 12px 0; flex-wrap: wrap; }
+.comment-filters [aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
+.comment-hint, .comment-card small { color: var(--muted); font-size: 12px; line-height: 1.5; }
+.document-comments input, .document-comments textarea { width: 100%; box-sizing: border-box; padding: 8px; background: var(--bg); border: 1px solid var(--panel-border); border-radius: 6px; color: var(--text); font: inherit; }
+.comment-card { margin-top: 14px; padding: 12px; border: 1px solid var(--panel-border); border-radius: 9px; overflow-wrap: anywhere; }
+.comment-card blockquote { margin: 0 0 8px; padding-left: 9px; border-left: 2px solid var(--accent); white-space: pre-wrap; max-height: 100px; overflow: auto; color: var(--muted); }
+.comment-message { padding: 12px 0; }
+.comment-message-body { white-space: pre-wrap; line-height: 1.6; margin-top: 4px; }
+.comment-composer { margin: 10px 0 0; display: grid; gap: 6px; }
+.comment-composer textarea { resize: vertical; min-height: 70px; }
+.comment-composer button { justify-self: end; }
+.source-block.has-open-comment { position: relative; box-shadow: inset 2px 0 color-mix(in srgb, var(--accent) 55%, transparent); }
+.comment-pin { position: absolute; right: 4px; top: 2px; color: var(--accent); background: var(--panel); border: 1px solid var(--panel-border); border-radius: 50%; cursor: pointer; z-index: 2; }
+.cm-comment-anchor { background: color-mix(in srgb, var(--accent) 10%, transparent); text-decoration: underline dotted var(--accent); text-underline-offset: 3px; }
+@media (max-width: 800px) { .document-comments { position: absolute; right: 0; top: 0; bottom: 0; width: min(320px, 85%); z-index: 8; box-shadow: -6px 0 24px #0002; } .document-body.has-comments, .document-body.has-outline.is-outline-collapsed.has-comments { grid-template-columns: minmax(0, 1fr); } .document-body.has-outline.has-comments { grid-template-columns: var(--document-outline-width) var(--document-outline-resizer-hit-width) minmax(0, 1fr); } }
+@media print { .document-comments, .comment-pin { display: none !important; } .source-block.has-open-comment { box-shadow: none; } }
+
+.preview-pane:has(.document-body.has-comments) .floating-document-actions { right: 336px; }
+@media (max-width: 1050px) { .preview-pane:has(.document-body.has-comments) .floating-document-actions { right: 16px; } .document-comments { padding-top: 58px; } }

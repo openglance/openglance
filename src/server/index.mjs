@@ -7,6 +7,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { BUILD_INFO } from "../build-info.mjs";
+import { transactDocument } from "./document-writes.mjs";
+import { commentMutation, commentsPayload } from "./document-comments.mjs";
+import { maskCommentRecords } from "../content/document-comments.mjs";
 import { decodeMarkdownLinkPath } from "../content/link-path.mjs";
 import { extractTitle, extractDocumentTitle, renderMarkdown } from "../content/markdown.mjs";
 import {
@@ -231,6 +234,7 @@ async function handleRequest(request, response, context) {
     requestUrl.pathname === "/image-preview.js" ||
     requestUrl.pathname === "/line-selection.js" ||
     requestUrl.pathname === "/agent-context.js" ||
+    requestUrl.pathname === "/document-comments.js" ||
     requestUrl.pathname === "/layout.js" ||
     requestUrl.pathname === "/ui-tooltip.js" ||
     requestUrl.pathname === "/tree-item-tooltip.js" ||
@@ -669,6 +673,31 @@ async function handleRequest(request, response, context) {
     return;
   }
 
+  if (requestUrl.pathname === "/api/document-comments") {
+    let repo = await localRequestRepository(request, requestUrl, context);
+    requireEditableRequest(request, context, repo);
+    if (request.method !== "POST") {
+      sendJson(response, 405, { error: "Method not allowed" });
+      return;
+    }
+    const file = documentFileFromRequest(requestUrl, repo);
+    const input = await readJsonRequest(request);
+    let branchState = { repo, created: false };
+    await transactDocument({
+      repoRoot: repo.root, file, expectedHash: `sha256:${input.expectedSourceHash}`,
+      mutate: (source) => commentMutation(source, input),
+      beforeWrite: async (protection) => {
+        branchState = await ensureRepositoryWriteBranch(repo, context, protection);
+        repo = branchState.repo;
+      },
+    });
+    sendJson(response, 200, {
+      ...(await documentPayload(repo, file, { locale: previewLocaleFromRequest(requestUrl), gitRunner: context.gitRunner })),
+      ...branchStatePayload(branchState),
+    });
+    return;
+  }
+
   if (requestUrl.pathname === "/api/document") {
     let repo = await localRequestRepository(request, requestUrl, context);
     const file = documentFileFromRequest(requestUrl, repo);
@@ -678,8 +707,8 @@ async function handleRequest(request, response, context) {
       let branchState = { repo, created: false };
       sendJson(response, 200, {
         ...(await writeDocumentPayload(repo, file, request, {
-          beforeWrite: async () => {
-            branchState = await ensureRepositoryWriteBranch(repo, context);
+          beforeWrite: async (protection) => {
+            branchState = await ensureRepositoryWriteBranch(repo, context, protection);
             repo = branchState.repo;
             return repo;
           },
@@ -1111,11 +1140,11 @@ async function withRuntimeBranch(repo, { includeLinks = true } = {}) {
   };
 }
 
-async function ensureRepositoryWriteBranch(repo, context) {
-  if (repo.branch && !repo.detached) {
+async function ensureRepositoryWriteBranch(repo, context, protection) {
+  if (!protection && repo.branch && !repo.detached) {
     return { repo, created: false };
   }
-  const result = await ensureWorktreeBranch(repo.root);
+  const result = protection ?? await ensureWorktreeBranch(repo.root);
   if (!result.created) {
     return { repo: { ...repo, branch: result.branch, detached: false }, created: false };
   }
@@ -1241,7 +1270,7 @@ export async function documentPayload(
   const dependencyHash = await datasetDependencyFingerprint({
     repoRoot: repo.root,
     documentPath: documentPath.relativePath,
-    datasetPaths: datasetReferencesFromMarkdown(source),
+    datasetPaths: datasetReferencesFromMarkdown(/\.mdx$/i.test(documentPath.relativePath) ? source : maskCommentRecords(source)),
   });
   const html = renderMarkdown(source, {
     currentFile: documentPath.relativePath,
@@ -1265,6 +1294,7 @@ export async function documentPayload(
 
   if (includeSource) {
     payload.source = source;
+    payload.comments = commentsPayload(source, documentPath.relativePath);
     payload.repoRoot = repo.root;
     payload.absolutePath = documentPath.absolutePath;
     Object.assign(
@@ -1319,7 +1349,7 @@ async function documentStatusPayload(repo, file, { canEdit = true, gitRunner = n
     ? await datasetDependencyFingerprint({
         repoRoot: repo.root,
         documentPath: documentPath.relativePath,
-        datasetPaths: datasetReferencesFromMarkdown(source),
+        datasetPaths: datasetReferencesFromMarkdown(/\.mdx$/i.test(documentPath.relativePath) ? source : maskCommentRecords(source)),
       })
     : "";
   return {
@@ -1476,8 +1506,12 @@ async function writeDocumentPayload(repo, file, request, { beforeWrite = async (
     throw error;
   }
 
-  repo = await beforeWrite();
-  await writeFile(documentPath.absolutePath, body.source, "utf8");
+  await transactDocument({
+    repoRoot: repo.root, file: documentPath.relativePath,
+    expectedHash: `sha256:${body.expectedSourceHash}`, allowMdx: true, maxBytes: 32 * 1024 * 1024,
+    mutate: () => body.source, validate: () => null,
+    beforeWrite: async (protection) => { repo = await beforeWrite(protection); },
+  });
   const fileStat = await stat(documentPath.absolutePath);
   return {
     path: documentPath.relativePath,
@@ -1898,6 +1932,12 @@ function readJsonRequest(request) {
     let body = "";
     request.setEncoding("utf8");
     request.on("data", (chunk) => {
+      if (body.length + chunk.length > 40 * 1024 * 1024) {
+        const error = new Error("Request body exceeds size limit.");
+        error.statusCode = 413;
+        reject(error);
+        return;
+      }
       body += chunk;
     });
     request.on("end", () => {

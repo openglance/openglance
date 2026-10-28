@@ -4,15 +4,18 @@ last_updated: 2026-10-28
 
 # Proposal: Git-backed document comments
 
-Status: proposed; reviewed with revisions. This document does not authorize or describe a shipped
-feature. It is for OpenGlance product reviewers, implementers, and agents working on the file format.
+Status: approved for the first App implementation slice on 2026-10-28: create, reply, resolve, and
+reopen in the right Comments panel. This is not an official desktop release record. It is for
+OpenGlance product reviewers, implementers, and agents working on the file format.
 The [implementation audit](2026-10-20-document-comments-research.md) records the source revisions,
 bounded experiments, and limits behind the recommendation.
 
 The format and write-safety prototype was authorized on 2026-10-28. Its
 [results and reproducible commands](2026-10-28-document-comments-prototype.md) cover raw-file agent
 writes, source preservation, editor-state history, and cooperating Git transactions. It remains
-separate from the App; editor save compatibility and production integration gates are still open.
+the basis for the shared runtime grammar and guarded writer. The first App slice has passed the
+existing Source/Live and Git checks plus isolated Preview/Live lifecycle acceptance. The
+[user guide](../user-guide.md#discuss-a-passage) describes the implemented interaction.
 
 ## Recommendation
 
@@ -24,9 +27,9 @@ account, database, or MCP connection.
 The user requirements are that comments travel through Git, OpenGlance can read and write them, and
 agents have a direct file interface. In-file storage is a preferred candidate, conditional on preserving
 ordinary Markdown. The record layout, JSON schema, conservative anchor matching, and initial scope
-below are recommendations for review, not previously approved product decisions.
+below define the approved first slice; later review actions remain design scope.
 
-Proceed first with a bounded format and write-safety prototype. Do not treat HTML syntax support,
+The bounded format and write-safety prototype is complete. Do not treat HTML syntax support,
 source-line mapping, or another product's README as proof that interoperability and concurrent editing
 are solved. Initial support should target `.md`. Ordinary MDX toolchains have different comment syntax;
 `.mdx` support needs its own compatibility decision and fixtures.
@@ -38,8 +41,9 @@ Git workflow. Another teammate or agent receives both content and discussion aft
 An agent can reply, revise the content, and attach a proposed location for the result. The reviewer
 can navigate to that result, verify it, and resolve the thread without losing the original quotation.
 
-The first version should support creating a thread, replying, resolving, reopening, manually locating
-a displaced comment, and explicitly deleting a thread. Resolved discussions remain in the file until
+The first implementation slice supports creating a thread, replying, resolving, and reopening.
+Manual relocation, explicit deletion, proposed-revision navigation, and richer message presentation
+remain follow-up App work; the raw-file helper already exposes the bounded format operations. Resolved discussions remain in the file until
 explicitly deleted. Changing the document or receiving an agent reply does not resolve a thread.
 Resolution and deletion are explicit actions, not inferred approval or automatic cleanup.
 
@@ -255,7 +259,8 @@ in the panel. Inspecting that history does not restore body decorations; explici
 thread can restore its unresolved marker when its anchor is located. Other unresolved threads retain
 their own presentation.
 
-Render messages as inert, sanitized Markdown using bounded local document-link behavior. A comment
+The initial App slice renders message bodies as inert text, retaining their stored Markdown syntax.
+A later richer presentation should use inert, sanitized Markdown and bounded local document links. A comment
 must not execute HTML, JSX, scripts, event handlers, shell commands, or automatic agent actions. Reading
 untrusted repository text must not cause an agent to treat comment content as higher-level instructions.
 
@@ -263,7 +268,7 @@ Only the view hides recognized records. Source and Live retain one complete sour
 outline, link previews, and MDX/dataset discovery must not interpret stored comment text as document
 structure or executable references. Preserve source line mapping through any rendering projection.
 Comment-only changes should appear in Sync and in the comments panel without painting the entire
-document body as changed. These are implementation requirements, not current behavior.
+document body as changed. These are runtime integration requirements covered by the implementation checks.
 
 ## Agent writes, editor writes, and Git
 
@@ -439,3 +444,18 @@ positional proximity is more valuable than avoiding changes inside Markdown cons
 The exact file grammar, limits, selection mapping, and write protocol should be finalized from the
 prototype evidence in a subsequent implementation specification. No unresolved choice here should be
 presented as an accepted format or silently added to current architectural authority.
+
+## First App slice acceptance
+
+The 2026-10-28 source implementation covers create, reply, resolve, and reopen for `.md` files.
+The core regression run passed 1,263 tests with one platform-specific skip. The focused comment
+contracts account for 45 tests within that run. Run `npm test` for the current result.
+
+`node scripts/smoke-document-comments-mac.mjs` invokes the isolated `make smoke-dev-mac` route. It
+creates a disposable Git repository and Profile, selects the second of two repeated paragraphs,
+creates/replies/resolves/reopens through the real Preview and Live controls, checks that comment-only
+writes leave the body and outline clean, reloads persisted threads, and verifies that an incoming
+Agent reply survives a real Source Undo and file save. It also checks unchanged HEAD and index and
+observes that no comment action invokes Git publication. The production Profile fingerprint remained
+unchanged after acceptance. This validates a source development build; no official desktop update or
+human App installation was performed.

@@ -5,7 +5,7 @@ import test from "node:test";
 import MarkdownIt from "markdown-it";
 import { renderMarkdown } from "../src/content/markdown.mjs";
 import {
-  LIMITS, captureAnchor, hashText, locateAnchor, locateRevision, mutateComments, parseComments, serializeThread,
+  hasOnlyCommentChanges, LIMITS, captureAnchor, hashText, locateAnchor, locateRevision, mutateComments, parseComments, serializeThread,
 } from "../scripts/document-comments/format.mjs";
 
 const body = "# Launch plan\n\nWe plan to launch next month.\n";
@@ -230,8 +230,19 @@ test("oversized and invalid records fail visibly without truncating or mutating 
   assert.throws(() => create(body, invalid), { code: "invalid_message" });
 });
 
-test("compatibility probe distinguishes CommonMark hiding from current OpenGlance literal rendering", () => {
+test("document rendering hides stored records while retaining the ordinary rendered body", () => {
   const document = create();
   assert(new MarkdownIt("commonmark", { html: true }).render(document).includes("<!-- openglance-comment:v1"));
-  assert(renderMarkdown(document).includes("&lt;!-- openglance-comment:v1"));
+  assert.equal(renderMarkdown(document), renderMarkdown(body));
+});
+
+test("pure comment changes leave body edit cues quiet without hiding actual body edits", () => {
+  const first = create();
+  const parsed = parseComments(first);
+  const resolved = mutateComments(first, { type: "set-status", thread_id: parsed.records[0].data.id, status: "resolved" });
+  assert.equal(hasOnlyCommentChanges(body, first), true);
+  assert.equal(hasOnlyCommentChanges(body.replaceAll("\n", "\r\n"), resolved), true);
+  assert.equal(hasOnlyCommentChanges(first, resolved), true);
+  assert.equal(hasOnlyCommentChanges(body, resolved.replace("launch next month", "launch tomorrow")), false);
+  assert.equal(hasOnlyCommentChanges("# Before\n", "# After\n"), false);
 });

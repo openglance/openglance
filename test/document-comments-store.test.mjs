@@ -187,7 +187,7 @@ for (const failAfterPatch of [false, true]) {
     assert.equal(prepared.ok, true, prepared.error);
     let blocked = 0;
     const reply = { type: "reply", thread_id: data.id, message: message("Retained draft.", "agent") };
-    const result = await withWorktreeMutation(root, () => applyPreparedRemoteChanges({
+    const result = await applyPreparedRemoteChanges({
       repo, preparationStore, preparationToken: prepared.preparationToken,
       snapshotCommandRunner: async (cwd, args, options) => {
         if (args[0] === "apply" && !args.includes("--check")) {
@@ -200,7 +200,7 @@ for (const failAfterPatch of [false, true]) {
         if (failAfterPatch && args.includes("OpenGlance merged remote changes")) throw new Error("Injected branch-update failure after patch");
         return runGitCommand(cwd, args);
       },
-    }));
+    });
     assert.equal(result.ok, !failAfterPatch, result.error);
     assert.equal(blocked, failAfterPatch ? 2 : 1);
     assert.equal((await readFile(path.join(root, "remote.md"), "utf8")).trim(), failAfterPatch ? "Remote before." : "Remote after.");
@@ -330,4 +330,25 @@ test("atomic writes preserve file permissions and a UTF-8 BOM", async (t) => {
   await applyCommentOperation({ ...target, expectedHash: start.sourceHash, operation: { type: "create", thread: thread() } });
   assert((await readFile(path.join(root, "plan.md"), "utf8")).startsWith(source));
   assert.equal((await lstat(path.join(root, "plan.md"))).mode & 0o777, before.mode & 0o777);
+});
+
+test("comment writes wait through real publishing's local commit phase while fetch and push leave the guard available", async (t) => {
+  const { root, target, repo } = await remoteFixture(t);
+  const inspected = await inspectDocument(target);
+  const written = await applyCommentOperation({ ...target, expectedHash: inspected.sourceHash, operation: { type: "create", thread: thread() } });
+  const { syncSelectedFiles } = await import('../src/server/git-sync.mjs');
+  let blocked = 0; let networkPhases = 0;
+  const result = await syncSelectedFiles({ repo, allChanges: true, gitRunner: async (cwd, args) => {
+    if (['fetch', 'push'].includes(args[0])) {
+      await withWorktreeMutation(root, async () => { networkPhases++; }, { timeoutMs: 0 });
+    }
+    if (args[0] === 'add' || args[0] === 'commit') {
+      await assert.rejects(transactDocument({ ...target, expectedHash: written.sourceHash, mutate: (source) => source, timeoutMs: 0 }), { code: 'worktree_busy' });
+      blocked++;
+    }
+    return runGitCommand(cwd, args);
+  } });
+  assert.equal(result.ok, true, result.error);
+  assert.equal(blocked, 2); assert.ok(networkPhases >= 2);
+  assert.equal((await inspectDocument(target)).records.length, 1);
 });

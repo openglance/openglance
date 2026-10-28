@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-16
+last_updated: 2026-10-28
 ---
 
 # OpenGlance user guide
@@ -298,6 +298,30 @@ controlled set of components and never runs arbitrary JSX, JavaScript, imports, 
 Repository maintainers who create these components can use the technical
 [MDX-lite reference](mdx-lite-guide.md). Most readers only need to open the document and use the
 rendered result.
+
+## Discuss a passage
+
+On a `.md` document, select text in Preview, Live, or Source and click **Add comment**. Selecting
+source line numbers also works. Preview uses the exact selection for plain paragraphs; for formatted
+or complex blocks the composer explicitly labels the paragraph or line range being discussed. Check
+that quotation before saving. MDX comments are not supported yet.
+
+The right **Comments** panel contains open threads and a **Resolved** filter. Add a reply below a
+thread, choose **Resolve** when the discussion is complete, or find it under **Resolved** and choose
+**Reopen**. Resolving removes that thread's marks from the body completely. Reading its resolved
+history leaves the body normal. Reopening restores the marker when the original text can still be
+located. If it has changed, the panel keeps the quote and reports that its location needs review.
+
+Enter a name for attribution if needed; this is a local signature, not an authenticated account.
+Comments and statuses are saved directly into HTML comment blocks in the same Markdown file. Source
+shows those records; Preview and Live hide them. Replies from agents use the same file format and
+appear after the document refreshes. The initial panel displays message bodies as inert text, including
+any Markdown syntax, so embedded HTML, links, and images cannot execute or load resources.
+
+**Save locally**, **Resolve**, and **Reopen** only change the local file. They do not commit, push,
+or publish. Use the existing **Sync and publish** action when you intend to share those changes.
+If saving encounters a newer file version, OpenGlance keeps the input rather than overwriting it.
+Agent Context remains in the left sidebar and works independently of comments.
 
 ## Give exact context to an AI agent
 

@@ -1,3 +1,4 @@
+import { createDocumentComments, selectedCommentRange } from "./document-comments.js";
 import {
   formatLineRange,
   formatLineReference,
@@ -212,6 +213,7 @@ import {
 } from "./tree-state.js";
 import {
   createSourceEditor,
+  hasOnlyCommentChanges,
   imageLineAttributes,
   imageLineForAction,
   normalizeImageAlign,
@@ -375,6 +377,9 @@ const state = {
   sourceEditor: null,
   sourceSyncTimer: null,
   sourceWriteInFlight: false,
+  sourceWritePromise: null,
+  sourceDirty: false,
+  commentWriteInFlight: false,
   sourceSyncState: "idle",
   lastSourceEditAt: 0,
   sourceRevision: 0,
@@ -564,6 +569,46 @@ const documentSearchNext = document.querySelector("#document-search-next");
 const documentSearchClose = document.querySelector("#document-search-close");
 const modeButtons = [...document.querySelectorAll("[data-mode]")];
 const modeReadonlyStatus = document.querySelector("#mode-readonly-status");
+const documentComments = createDocumentComments({
+  getDocument: () => state.currentDocument,
+  getLocale: () => state.locale,
+  getEditor: () => state.sourceEditor,
+  getSelection: () => selectedCommentRange({ source: state.currentDocument?.source ?? "", mode: state.mode,
+    editor: state.sourceEditor, lines: state.selectedLines, root: documentContent }),
+  revealLine: (line) => { selectSourceRange(line, line); scrollToHashSelectedLine(); },
+  mutate: async (input) => {
+    const request = currentDocumentRequest();
+    if (!request || state.commentWriteInFlight || state.remoteSyncOperation === "merge") throw new Error("Document is busy; retain the draft and retry.");
+    state.commentWriteInFlight = true;
+    state.sourceEditor?.setEditable(false);
+    try {
+      await flushPendingSourceSync();
+      if (state.sourceDirty || state.sourceWriteInFlight || state.sourceSyncState === "error") throw new Error("Save the editor changes before changing comments. Your draft is retained.");
+      if (!isCurrentDocumentRequest(request)) throw new Error("Document changed. Your draft is retained.");
+      await discardPreparedAutomaticRemoteMerge();
+      const expectedSourceHash = input.type === "create" && input.selectionSource !== state.currentDocument.source.replace(/\r\n?/g, "\n")
+        ? input.expectedSourceHash : state.lastWrittenHash;
+      const response = await fetch(apiUrl("/api/document-comments", { repo: request.repoId, file: request.path, locale: state.locale }), {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...input, expectedSourceHash, selectionSource: undefined }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Comment could not be saved. Your draft is retained.");
+      await applyBranchProtectionPayload(result);
+      if (isCurrentDocumentRequest(request)) {
+        state.sourceRevision++;
+        applyDocumentData(result, { preserveScroll: true, preserveEditorState: true });
+        state.selectedLines = new Set(); updateLineSelectionUi();
+        window.getSelection()?.removeAllRanges();
+        updateSourceSyncStatus("idle");
+      }
+      scheduleGitStatusRefresh();
+    } finally {
+      state.commentWriteInFlight = false;
+      state.sourceEditor?.setEditable(canEditCurrentDocument());
+    }
+  },
+});
+
 const linkPreviewController = attachLinkPreviews({
   containers: [documentContent, sourceEditorHost],
   getContext: () => ({ repo: state.currentRepo, file: state.currentDocument?.path || state.currentFile,
@@ -1576,7 +1621,7 @@ async function prepareAutomaticRemoteMerge() {
   renderGitChangeToolbar();
   try {
     await flushPendingSourceSync();
-    if (state.sourceWriteInFlight) {
+    if (state.commentWriteInFlight || state.sourceWriteInFlight) {
       scheduleAutomaticRemoteMergeRetry();
       return;
     }
@@ -1651,6 +1696,7 @@ async function prepareAutomaticRemoteMerge() {
 }
 
 async function applyPreparedAutomaticRemoteMerge() {
+  if (state.commentWriteInFlight) { scheduleAutomaticRemoteMergeRetry(); return; }
   if (state.remoteSyncOperation || !state.remoteSyncPreparedMerge) {
     return;
   }
@@ -2395,6 +2441,7 @@ function applyDocumentData(
   const scrollTop = preserveScroll ? documentContent.scrollTop : 0;
   const shouldReplace = forceReplace || shouldReplaceDocumentHtml(state.currentDocument, documentData);
   state.currentDocument = documentData;
+  state.sourceDirty = false;
   state.savedFrontmatter = frontmatterSourceSignature(documentData.source);
   state.documentChangeModel = documentChangeModelForDocument(documentData);
   state.currentFile = documentData.path;
@@ -2464,6 +2511,7 @@ function applyDocumentData(
   updateDocumentHistoryControls();
   refreshDocumentSearch({ preserveIndex: true, reveal: false });
   persistWorkbenchSession();
+  documentComments.render();
 }
 
 function setMode(mode, options = {}) {
@@ -2603,6 +2651,7 @@ function documentChangeModelForDocument(documentData) {
   ) {
     return emptyDocumentChangeModel();
   }
+  if (/\.md$/i.test(documentData.path) && hasOnlyCommentChanges(documentData.changeBaselineSource ?? "", documentData.source)) return emptyDocumentChangeModel();
   return createDocumentChangeModel({
     baselineSource: documentData.changeBaselineSource ?? "",
     currentSource: documentData.source,
@@ -3669,6 +3718,7 @@ function apiUrl(pathname, params = {}) {
 function updateDocumentActions(hasDocument) {
   const canUseEditor = hasDocument && canEditCurrentDocument();
   floatingDocumentActions.hidden = !hasDocument;
+  if (!hasDocument) documentComments.render();
   documentFavoriteToggle.hidden = !hasDocument || !isMarkdownDocument();
   copyShareLinkButton.hidden = !hasDocument || !isMarkdownDocument();
   copyShareLinkButton.disabled = !hasDocument || !isMarkdownDocument();
@@ -3715,6 +3765,7 @@ function ensureSourceEditor() {
     onBeforeSlashCommand: ensureSlashCommandAllowed,
   });
   applySourceEditorDocumentChangeBaseline();
+  documentComments.render();
 }
 
 function applyAppearancePreferences(preferences) {
@@ -4121,6 +4172,7 @@ function scheduleSourceSync(source) {
   if (!canEditCurrentDocument() || !isEditorMode() || !state.currentDocument) {
     return;
   }
+  state.sourceDirty = true;
   state.currentDocument.source = source;
   state.lastSourceEditAt = Date.now();
   state.sourceRevision += 1;
@@ -4138,6 +4190,16 @@ function scheduleSourceSync(source) {
 }
 
 async function syncSourceToDisk() {
+  if (state.sourceWritePromise) {
+    const result = await state.sourceWritePromise;
+    return result && state.sourceDirty ? syncSourceToDisk() : result;
+  }
+  state.sourceWritePromise = writeSourceToDisk();
+  try { return await state.sourceWritePromise; }
+  finally { state.sourceWritePromise = null; }
+}
+
+async function writeSourceToDisk() {
   if (!canEditCurrentDocument() || !state.currentDocument || !state.sourceEditor) {
     return true;
   }
@@ -4149,7 +4211,9 @@ async function syncSourceToDisk() {
   window.clearTimeout(state.sourceSyncTimer);
   state.sourceSyncTimer = null;
   state.sourceWriteInFlight = true;
+  const revision = state.sourceRevision;
   const source = state.sourceEditor.getValue();
+  const expectedSourceHash = state.lastWrittenHash;
   const metadataChanged = state.savedFrontmatter !== frontmatterSourceSignature(source);
   try {
     const response = await fetch(
@@ -4157,11 +4221,12 @@ async function syncSourceToDisk() {
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ source }),
+        body: JSON.stringify({ source, expectedSourceHash }),
       },
     );
     if (!response.ok) {
-      throw new Error("Source sync failed");
+      const result = await response.json();
+      throw new Error(result.error || "Source sync failed");
     }
     const payload = await response.json();
     await applyBranchProtectionPayload(payload);
@@ -4171,13 +4236,16 @@ async function syncSourceToDisk() {
     }
     state.currentDocument = {
       ...state.currentDocument,
-      source,
+      source: revision === state.sourceRevision ? source : state.currentDocument.source,
       mtimeMs: payload.mtimeMs,
       sourceHash: payload.sourceHash,
     };
     state.lastWrittenHash = payload.sourceHash;
     if (metadataChanged) state.frontmatterFacets = null;
-    await refreshCurrentDocument();
+    if (revision === state.sourceRevision) {
+      state.sourceDirty = false;
+      await refreshCurrentDocument();
+    }
     if (metadataChanged && (
       state.frontmatterFilters.length > 0 ||
       (state.filter.length > 0 && state.frontmatterAllowedKeys.length > 0)
@@ -4186,7 +4254,7 @@ async function syncSourceToDisk() {
     }
     if (updateTreeDocumentTitle(state.tree, state.currentDocument.path, state.currentDocument.treeTitle)) renderTree();
     scheduleGitStatusRefresh();
-    updateSourceSyncStatus("idle");
+    updateSourceSyncStatus(state.sourceDirty ? "syncing" : "idle");
     const telemetryNow = Date.now();
     if (telemetryNow - lastEditingTelemetryAt >= EDITING_TELEMETRY_INTERVAL_MS) {
       recordTelemetryFeature("editing.activity", { mode: state.mode });
@@ -4196,6 +4264,7 @@ async function syncSourceToDisk() {
   } catch (error) {
     if (isCurrentDocumentRequest(request)) {
       updateSourceSyncStatus("error");
+      showCopyToast(error.message);
     }
     return false;
   } finally {
@@ -4264,22 +4333,11 @@ async function restartToolAfterUpdate(status) {
 }
 
 async function flushPendingSourceSync() {
-  if (!state.canEdit || !isEditorMode() || !state.currentDocument || !state.sourceEditor) {
-    return;
-  }
-
-  if (state.sourceSyncTimer) {
-    window.clearTimeout(state.sourceSyncTimer);
-    state.sourceSyncTimer = null;
-    const synced = await syncSourceToDisk();
-    if (!synced) {
-      throw new Error("Source sync failed before restart");
-    }
-  }
-
-  const startedAt = Date.now();
-  while (state.sourceWriteInFlight && Date.now() - startedAt < 3_000) {
-    await delay(50);
+  if (!state.canEdit || !state.currentDocument || !state.sourceEditor) return;
+  if (state.sourceWritePromise) await state.sourceWritePromise;
+  while (state.sourceSyncTimer || state.sourceDirty) {
+    window.clearTimeout(state.sourceSyncTimer); state.sourceSyncTimer = null;
+    if (!await syncSourceToDisk()) throw new Error("Source save failed. Local editor changes are retained.");
   }
 }
 
@@ -8866,7 +8924,7 @@ function selectSourceLine(line, event) {
   selectSourceRange(line, line, event);
 }
 
-function selectSourceRange(start, end, event) {
+function selectSourceRange(start, end, event = {}) {
   if (!Number.isInteger(start) || !Number.isInteger(end)) {
     return;
   }
@@ -9272,7 +9330,7 @@ async function handleWatchedDocumentChange(event, request = currentDocumentReque
   }
   applyRepositoryStatus(payload);
   enforceCurrentRepoEditCapability();
-  if (state.sourceWriteInFlight || state.remoteSyncOperation === "merge") {
+  if (state.sourceDirty || state.commentWriteInFlight || state.sourceWriteInFlight || state.remoteSyncOperation === "merge") {
     return;
   }
   const refreshKind = documentStatusRefreshKind(state.currentDocument, payload, {
@@ -9310,7 +9368,7 @@ async function checkDocumentStatus({ required = false } = {}) {
   }
   applyRepositoryStatus(status);
   enforceCurrentRepoEditCapability();
-  if (state.sourceWriteInFlight || state.remoteSyncOperation === "merge") {
+  if (state.sourceDirty || state.commentWriteInFlight || state.sourceWriteInFlight || state.remoteSyncOperation === "merge") {
     if (required) throw new Error("Document is changing");
     return;
   }
@@ -9329,6 +9387,7 @@ async function refreshCurrentDocument({ external = false, remoteMerge = false, b
     return;
   }
 
+  const revision = state.sourceRevision;
   const response = await fetch(
     apiUrl("/api/document", {
       repo: request.repoId,
@@ -9346,6 +9405,7 @@ async function refreshCurrentDocument({ external = false, remoteMerge = false, b
     if (required && isCurrentDocumentRequest(request)) throw new Error("Invalid current document response");
     return;
   }
+  if (revision !== state.sourceRevision || state.sourceDirty) return;
   if (baselineOnly) {
     // A commit changes the comparison baseline, not the editor's current text or pending writes.
     state.currentDocument = withDocumentChangeBaseline(state.currentDocument, documentData);

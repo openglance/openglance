@@ -954,6 +954,7 @@ test("document write API syncs source content to disk", async () => {
   const repoRoot = await mkdtemp(path.join(tmpdir(), "git-leaf-"));
   const filePath = path.join(repoRoot, "sample.md");
   await writeFile(filePath, "# Sample\n");
+  await execFileAsync("git", ["init", "-b", "main"], { cwd: repoRoot });
   const initialFile = await resolvePreviewPath(repoRoot, "sample.md");
   const server = createPreviewServer({ repoRoot, initialFile });
   const baseUrl = await listen(server);
@@ -962,7 +963,7 @@ test("document write API syncs source content to disk", async () => {
     const response = await fetch(`${baseUrl}/api/document?file=sample.md`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ source: "# Changed\n\nBody\n" }),
+      body: JSON.stringify({ source: "# Changed\n\nBody\n", expectedSourceHash: (await getJson(`${baseUrl}/api/document?file=sample.md`)).sourceHash }),
     });
     const payload = await response.json();
 
@@ -1778,6 +1779,7 @@ test("prepared merge API stays read-only until apply and then preserves dirty lo
 test("git sync API returns an Agent prompt when the fixed Git flow fails", async () => {
   const repoRoot = await mkdtemp(path.join(tmpdir(), "git-leaf-"));
   await writeFile(path.join(repoRoot, "sample.md"), "# Sample\n");
+  await execFileAsync("git", ["init", "-b", "main"], { cwd: repoRoot });
   const initialFile = await resolvePreviewPath(repoRoot, "sample.md");
   const server = createPreviewServer({
     repoRoot,
@@ -1986,6 +1988,7 @@ test("index page exposes edit capability for the current browser", async () => {
 test("repository payloads contain no sharing tokens", async () => {
   const repoRoot = await mkdtemp(path.join(tmpdir(), "git-leaf-"));
   await writeFile(path.join(repoRoot, "sample.md"), "# Sample\n");
+  await execFileAsync("git", ["init", "-b", "main"], { cwd: repoRoot });
   const initialFile = await resolvePreviewPath(repoRoot, "sample.md");
   const repository = {
     id: "docs-repo",
@@ -2022,7 +2025,7 @@ test("repository payloads contain no sharing tokens", async () => {
     const writeResponse = await fetch(`${baseUrl}/api/document?repo=docs-repo&file=sample.md`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ source: "# Changed\n" }),
+      body: JSON.stringify({ source: "# Changed\n", expectedSourceHash: (await getJson(`${baseUrl}/api/document?file=sample.md`)).sourceHash }),
     });
     assert.equal(writeResponse.ok, true);
     assert.equal(await readFile(path.join(repoRoot, "sample.md"), "utf8"), "# Changed\n");
@@ -2071,6 +2074,7 @@ test("non-main repositories remain locally editable", async () => {
   await mkdir(repoRoot, { recursive: true });
   await writeFile(path.join(repoRoot, "branch.md"), "# Branch Preview\n");
 
+  await execFileAsync("git", ["init", "-b", "feature/non-main-editing"], { cwd: repoRoot });
   const initialFile = await resolvePreviewPath(repoRoot, "branch.md");
   const repository = {
     id: "branch-repo",
@@ -2105,7 +2109,7 @@ test("non-main repositories remain locally editable", async () => {
     const writeResponse = await fetch(`${baseUrl}/api/document?repo=branch-repo&file=branch.md`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ source: "# Changed\n" }),
+      body: JSON.stringify({ source: "# Changed\n", expectedSourceHash: (await getJson(`${baseUrl}/api/document?file=branch.md`)).sourceHash }),
     });
     assert.equal(writeResponse.ok, true);
     assert.equal(await readFile(path.join(repoRoot, "branch.md"), "utf8"), "# Changed\n");
@@ -2189,7 +2193,7 @@ test("worktree API lists linked worktrees and detached writes create a protectio
     const response = await fetch(`${baseUrl}/api/document?repo=docs-repo&file=README.md`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ source: "# Protected edit\n" }),
+      body: JSON.stringify({ source: "# Protected edit\n", expectedSourceHash: (await getJson(`${baseUrl}/api/document?file=README.md`)).sourceHash }),
     });
     const payload = await response.json();
     const { stdout: branchOutput } = await execFileAsync("git", ["branch", "--show-current"], {
@@ -2259,6 +2263,7 @@ test("public module assets are served for the browser", async () => {
       "image-preview.js",
       "line-selection.js",
       "agent-context.js",
+      "document-comments.js",
       "layout.js",
       "ui-tooltip.js",
       "tree-item-tooltip.js",
@@ -2434,7 +2439,7 @@ test("a stale named-branch display cannot authorize a detached write without a f
   try {
     assert.equal((await getJson(`${url}/api/tree`)).detached,false);
     await git(["checkout","--detach","-q","HEAD"]);
-    const response=await fetch(`${url}/api/document?file=sample.md`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({source:"# Protected write\n"})});
+    const response=await fetch(`${url}/api/document?file=sample.md`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({source:"# Protected write\n",expectedSourceHash:(await getJson(`${url}/api/document?file=sample.md`)).sourceHash})});
     const payload=await response.json();assert.equal(response.status,200,payload.error);
     assert.equal(payload.branchCreated,true);assert.match((await git(["branch","--show-current"])).stdout,/^openglance\/detached-/);
     assert.equal(await readFile(path.join(repoRoot,"sample.md"),"utf8"),"# Protected write\n");

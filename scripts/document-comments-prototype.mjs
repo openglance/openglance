@@ -21,7 +21,7 @@ export async function runPrototype(args, { stdin = process.stdin } = {}) {
   if (command === "--help" || command === "help") return {
     usage: "node scripts/document-comments-prototype.mjs inspect|apply --repo <worktree-root> --file <relative.md> [--expected-hash sha256:...]",
     apply: "Read one JSON operation from stdin: create, reply, revise, locate, set-status, or delete.",
-    boundary: "Experimental CLI; not connected to the App. Run on a disposable worktree. No commits or pushes.",
+    boundary: "Shares the App comment format and guarded writer. Inspect before every write. No commits or pushes.",
   };
   const options = {};
   for (let index = 0; index < flags.length; index += 2) {

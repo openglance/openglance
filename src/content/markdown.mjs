@@ -1,4 +1,5 @@
 import MarkdownIt from "markdown-it";
+import { maskCommentRecords } from "./document-comments.mjs";
 
 import { createTranslator } from "../../public/i18n.js";
 import { decodeMarkdownLinkPath } from "./link-path.mjs";
@@ -52,6 +53,7 @@ const MARKDOWN_MESSAGES = Object.freeze({
 });
 
 export function renderMarkdown(markdown, options = {}) {
+  if (!String(options.currentFile ?? "").toLowerCase().endsWith(".mdx")) markdown = maskCommentRecords(markdown);
   const { source, lineOffset } = stripFrontmatter(markdown);
   const translate = createTranslator(MARKDOWN_MESSAGES, options.locale);
   const renderer = createRenderer({
@@ -67,6 +69,7 @@ export function extractTitle(markdown, fallbackPath) {
 
 // Uses the same parser, heading IDs and frontmatter offset as document rendering.
 export function markdownLinkPreview(markdown, { file = "", hash = "" } = {}) {
+  if (!file.toLowerCase().endsWith(".mdx")) markdown = maskCommentRecords(markdown);
   const title = extractTitle(markdown, file);
   const { source, lineOffset } = stripFrontmatter(markdown);
   const tokens = createRenderer({}).parse(source, {});
@@ -127,6 +130,7 @@ function previewSummaryField(markdown, key) {
 }
 
 export function extractDocumentTitle(markdown) {
+  markdown = maskCommentRecords(markdown);
   const frontmatterTitle = extractFrontmatterScalar(markdown, "title");
   if (frontmatterTitle) {
     return frontmatterTitle;

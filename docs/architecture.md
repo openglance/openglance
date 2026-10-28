@@ -441,7 +441,8 @@ Preview and CodeMirror, including while a changed or active line is highlighted 
 Except for explicitly allowlisted MDX-lite components, OpenGlance must prefer source syntax that remains
 readable and editable in Obsidian and other CommonMark or GitHub-Flavored Markdown tools. A visual Live
 control is an interface over portable source, not permission to introduce an OpenGlance-only table schema,
-hidden metadata, or a second document representation. Exact rendering and editor affordances may still
+hidden table metadata, or a second document representation. Document comment records are the bounded
+exception described below. Exact rendering and editor affordances may still
 differ between applications.
 
 In particular, table rows and alignment remain native pipe-table syntax. Bold, italic, and
@@ -526,6 +527,51 @@ the quoted content.
 The component allowlist, attributes, input data formats, and rendering contracts live only in
 [MDX-lite reference](mdx-lite-guide.md).
 
+## Markdown document comments
+
+The shared grammar in `src/content/document-comments.mjs` recognizes independent top-level
+`<!-- openglance-comment:v1` JSON records in `.md` documents. New threads append at a structurally
+safe EOF; replies and status updates replace only the owning record. Unknown fields survive supported
+edits; malformed, duplicated, future-version, and unrelated records remain opaque and byte-preserved.
+The finite schema and portable body-hash vectors are covered by the document-comments tests.
+MDX comments require a separate syntax decision and are not enabled.
+
+A thread contains a UUID, open/resolved status, an exact quote with bounded surrounding context, and
+attributed UTC-stamped messages. Locations are derived from the normalized body projection and mapped
+back to complete-source coordinates. Multiple matching passages are not guessed. HTTP selections use
+LF-normalized full-source UTF-16 offsets, including the actual occurrence selected by the user. Preview
+uses exact mapping only where rendered text matches its source; otherwise the composer explicitly
+labels a source-backed paragraph/line range. Source and Live use CodeMirror selection offsets.
+
+Only recognized record envelopes are masked from Preview and Live presentation. The mask preserves
+physical newlines and source provenance. Code examples, lists, frontmatter, and HTML containers are
+not metadata. Complete source, including comments, remains the sole editing model. The right Comments
+panel is independent of left-sidebar Agent Context. Initial messages render as inert text: no HTML,
+remote images, active links, MDX, or automatic Agent actions. A local author name is attribution, not
+identity authentication.
+
+Only open, located threads decorate the body. Resolve removes the thread's highlights and pins
+completely; its messages and original quote remain under Resolved. Merely inspecting resolved history
+does not decorate the body. Reopen restores markers only when the anchor is located. Create, reply,
+resolve, and reopen write only local file bytes; publication remains the existing explicit Git action.
+
+`POST /api/document-comments` applies a bounded operation, and `POST /api/document` saves complete
+Source/Live text. Both require the last observed full-source SHA-256, trusted local write access, and
+an exact regular document path inside the worktree. Server writes share `transactDocument`, which checks
+Git operations, creates a protective branch before detached writes, preserves permissions, writes and
+flushes a same-directory temporary file, and rechecks identity and source before atomic replacement.
+Supported comment edits preserve body bytes and line endings. Source/Live saves represent the editor's
+complete text and normalize its line endings as CodeMirror does.
+
+Cooperating App and Agent transactions share a per-worktree exclusive filesystem guard. Git remote-merge
+preparation and apply/rollback, plus the local freeze/commit/rebase phase of publishing, use that guard.
+Network fetch/push run outside it. The checked preparation fingerprint rejects comments arriving after
+preparation. Source/Live saves are serialized and external refreshes defer while local input is dirty.
+Non-history editor transactions map received file changes through local undo history, so undoing a body
+edit does not remove received comments. A stale save keeps the buffer/draft and returns a conflict;
+it does not silently rebase local text. Ordinary external tools do not acquire this guard, so the final
+identity/hash recheck detects observed drift without claiming filesystem compare-and-swap semantics.
+
 ## Editing and write boundaries
 
 Document status tracks the current file's committed Git blob independently of its working-file content
@@ -535,8 +581,9 @@ Preview, Source, Live, and outline cues while retaining the current document sur
 and pending local input.
 
 Source and Live write the current file after a short debounce. Watcher events caused by OpenGlance's own
-write are ignored by content state to avoid reload loops. External changes reload from disk. A narrow
-race may lose not-yet-flushed keystrokes rather than creating an independent hidden draft model.
+write are ignored by content state to avoid reload loops. External changes reload from disk only when
+there is no pending local input. Saves carry a full-source version precondition, and a concurrent
+change leaves the local buffer intact with a save error instead of overwriting either version.
 
 Document creation is limited to Markdown and MDX. The service adds a safe extension when needed,
 rejects paths outside the repository, refuses overwrite, and opens the new document in a foreground tab.

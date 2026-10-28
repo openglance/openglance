@@ -1,3 +1,4 @@
+import { withWorktreeMutation } from "./worktree-mutation.mjs";
 import { createHash } from "node:crypto";
 import { access } from "node:fs/promises";
 import path from "node:path";
@@ -161,6 +162,7 @@ export async function syncSelectedFiles({
   language,
   gitRunner = runGitCommand,
   syncGuard: providedSyncGuard = null,
+  mutationGuard = withWorktreeMutation,
   operationPathExists = gitOperationPathExists,
 }) {
   const translate = gitSyncTranslator({ locale, language });
@@ -192,6 +194,7 @@ export async function syncSelectedFiles({
     let changes = [];
     let changesByPath = new Map();
     let remoteBehind = 0;
+    let verifiedBaseline;
 
     for (;;) {
       const status = await runStep(context, "status", gitRunner, [
@@ -270,6 +273,7 @@ export async function syncSelectedFiles({
       const current = await syncGuard.capture({ changes, files: selectedFiles });
       const detectedDrift = syncStateDriftKind(baseline, current);
       if (detectedDrift === "none") {
+        verifiedBaseline = current;
         break;
       }
       driftKind = detectedDrift;
@@ -285,74 +289,84 @@ export async function syncSelectedFiles({
       retryCount += 1;
     }
 
-    const stagePaths = selectedFiles.flatMap((file) => {
-      const change = changesByPath.get(file);
-      return change?.oldPath ? [file, change.oldPath] : [file];
-    });
-    await runStep(context, "add", gitRunner, ["add", "-A", "--", ...stagePaths]);
-    const staged = await runStep(context, "diff staged", gitRunner, [
-      "diff",
-      "--cached",
-      "--name-only",
-      "-z",
-      "--",
-      ...stagePaths,
-    ]);
-    if (!staged.stdout.trim()) {
-      return failurePayload({
-        ...context,
-        step: "diff staged",
-        error: translate("error.noStagedChanges"),
-        retryCount,
-        driftKind,
+    // Network fetch is complete. Serialize only the local freeze/commit/rebase phase.
+    const frozen = await mutationGuard(repo.root, async () => {
+      if (syncStateDriftKind(verifiedBaseline, await syncGuard.capture({ changes, files: selectedFiles })) !== "none") {
+        driftKind = "pre_commit_changed";
+        throw new Error(translate("error.workspaceStillChanging"));
+      }
+      const stagePaths = selectedFiles.flatMap((file) => {
+        const change = changesByPath.get(file);
+        return change?.oldPath ? [file, change.oldPath] : [file];
       });
-    }
-
-    const commitMessage = await createSyncCommitMessage({
-      ...context,
-      files: stagePaths,
-      changes,
-      gitRunner,
-    });
-    const commitArgs = [
-      "commit",
-      "-m",
-      commitMessage.subject,
-      ...(commitMessage.body ? ["-m", commitMessage.body] : []),
-      ...(allChanges ? [] : ["--", ...stagePaths]),
-    ];
-    await runStep(context, "commit", gitRunner, commitArgs);
-    let publishHead = await syncGuard.currentHead();
-    const worktreeClean = await syncGuard.isWorktreeClean();
-    if (!worktreeClean) {
-      driftKind = "post_commit_changed";
-      if (hasUpstream && remoteBehind > 0) {
+      await runStep(context, "add", gitRunner, ["add", "-A", "--", ...stagePaths]);
+      const staged = await runStep(context, "diff staged", gitRunner, [
+        "diff",
+        "--cached",
+        "--name-only",
+        "-z",
+        "--",
+        ...stagePaths,
+      ]);
+      if (!staged.stdout.trim()) {
         return failurePayload({
           ...context,
-          step: "workspace changed",
-          error: translate("error.postCommitChanged"),
+          step: "diff staged",
+          error: translate("error.noStagedChanges"),
           retryCount,
           driftKind,
         });
       }
-    }
-    if (hasUpstream && remoteBehind > 0) {
-      try {
-        await runStep(context, "rebase remote", gitRunner, [
-          "rebase",
-          `refs/remotes/origin/${repo.branch}`,
-        ]);
-      } catch (error) {
-        try {
-          await gitRunner(repo.root, ["rebase", "--abort"]);
-          error.openGlanceRecovery = translate("error.rebaseAbortSucceeded");
-        } catch {
-          error.openGlanceRecovery = translate("error.rebaseAbortFailed");
+
+      const commitMessage = await createSyncCommitMessage({
+        ...context,
+        files: stagePaths,
+        changes,
+        gitRunner,
+      });
+      const commitArgs = [
+        "commit",
+        "-m",
+        commitMessage.subject,
+        ...(commitMessage.body ? ["-m", commitMessage.body] : []),
+        ...(allChanges ? [] : ["--", ...stagePaths]),
+      ];
+      await runStep(context, "commit", gitRunner, commitArgs);
+      let publishHead = await syncGuard.currentHead();
+      const worktreeClean = await syncGuard.isWorktreeClean();
+      if (!worktreeClean) {
+        driftKind = "post_commit_changed";
+        if (hasUpstream && remoteBehind > 0) {
+          return failurePayload({
+            ...context,
+            step: "workspace changed",
+            error: translate("error.postCommitChanged"),
+            retryCount,
+            driftKind,
+          });
         }
-        throw error;
       }
-      publishHead = await syncGuard.currentHead();
-    }
+      if (hasUpstream && remoteBehind > 0) {
+        try {
+          await runStep(context, "rebase remote", gitRunner, [
+            "rebase",
+            `refs/remotes/origin/${repo.branch}`,
+          ]);
+        } catch (error) {
+          try {
+            await gitRunner(repo.root, ["rebase", "--abort"]);
+            error.openGlanceRecovery = translate("error.rebaseAbortSucceeded");
+          } catch {
+            error.openGlanceRecovery = translate("error.rebaseAbortFailed");
+          }
+          throw error;
+        }
+        publishHead = await syncGuard.currentHead();
+      }
+      return { publishHead, worktreeClean };
+    });
+    if (!frozen.publishHead) return frozen;
+    const { publishHead, worktreeClean } = frozen;
     if (await syncGuard.currentHead() !== publishHead) {
       return failurePayload({
         ...context,
