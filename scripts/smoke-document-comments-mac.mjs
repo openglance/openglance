@@ -105,7 +105,40 @@ try {
   }, 240000);
   assert.equal(realpathSync(isolatedAppProcess().executable), realpathSync(path.join(userData, "Applications", "OpenGlance.app", "Contents", "MacOS", "OpenGlance")));
   await waitForDocument("Comment smoke"); await click('#mode-preview');
-  if (process.argv.includes('--selection-entry')) {
+  if (process.argv.includes('--toolbar')) {
+    const observed=await evaluate(`(() => { const actions=document.querySelector('#floating-document-actions'); const favorite=document.querySelector('#document-favorite-toggle'); const comments=document.querySelector('#document-comments-toggle'); return {visibleActions:[...actions.querySelectorAll('button')].filter(node=>!node.hidden).map(node=>node.id),favorite:{width:favorite.getBoundingClientRect().width,height:favorite.getBoundingClientRect().height},comments:{width:comments.getBoundingClientRect().width,height:comments.getBoundingClientRect().height,label:comments.getAttribute('aria-label'),tooltip:comments.dataset.uiTooltip}}; })()`);
+    console.log('Document toolbar layout:', JSON.stringify(observed));
+    await screenshot(process.argv.includes('--expect-wide-comment-actions') ? 'document-comments-toolbar-before.png' : 'document-comments-toolbar-after.png');
+    if(process.argv.includes('--expect-wide-comment-actions')) {
+      assert.ok(observed.comments.width>observed.favorite.width);
+      await click('#comment-selection');
+      assert.equal(await evaluate('!!document.querySelector("#document-comments [role=alert]")'),true);
+      console.log('REPRODUCED: a wide comment control and an unanchored Add comment action occupy the document toolbar.');
+    } else {
+      assert.deepEqual(observed.visibleActions,['document-favorite-toggle','copy-share-link','document-comments-toggle','document-actions-more']);
+      assert.equal(observed.comments.width,observed.favorite.width); assert.equal(observed.comments.height,observed.favorite.height);
+      assert.ok(observed.comments.label); assert.ok(observed.comments.tooltip);
+      for(const mode of ['preview','live']) {
+        await click(`#mode-${mode}`);
+        await click('#document-comments-toggle');
+        assert.equal(await evaluate('!document.querySelector("#document-comments").hidden && document.querySelector("#document-comments-toggle").getAttribute("aria-expanded")==="true"'),true);
+        assert.equal(await evaluate('document.querySelector("[data-comment-action=create]").disabled'),true,'new discussions need a source selection');
+        assert.equal(await evaluate('!!document.querySelector("#document-comments [role=alert]")'),false,'opening comments does not initiate an unanchored creation');
+        await click('#document-comments-toggle');
+        assert.equal(await evaluate('document.querySelector("#document-comments").hidden && document.querySelector("#document-comments-toggle").getAttribute("aria-expanded")==="false"'),true);
+      }
+      await click('#mode-preview');
+      await click('#document-comments-toggle');
+      await click('#document-content [data-source-line="3"]');
+      await until(() => evaluate('!document.querySelector("[data-comment-action=create]").disabled'));
+      await click('[data-comment-action=create]');
+      await until(() => evaluate('!!document.querySelector(".comment-new textarea")'));
+      assert.equal(await evaluate('document.querySelector(".comment-new blockquote").textContent'),'Repeated paragraph for review.');
+      await screenshot('document-comments-toolbar-open.png');
+      await screenshot('document-comments-toolbar-closed.png');
+      console.log('PASS: compact comment icon after sharing, accessible tooltip, and sidebar toggling in Preview and Live.');
+    }
+  } else if (process.argv.includes('--selection-entry')) {
     await evaluate(`(() => {
       window.selectionEntryEvents = [];
       const target = [...document.querySelectorAll('#document-content p')].filter(node => node.textContent.includes('Repeated paragraph')).at(-1);
@@ -124,7 +157,7 @@ try {
     const observed = await evaluate(`({selected:getSelection().toString(),connected:window.selectionEntryOriginalNode.isConnected,
       linePopoverHidden:document.querySelector('#selection-popover').hidden,
       floatingCommentVisible:!!document.querySelector('#comment-text-selection:not([hidden])'),
-      toolbarCommentVisible:!document.querySelector('#comment-selection').hidden,events:window.selectionEntryEvents})`);
+      commentPanelControlVisible:!document.querySelector('#document-comments-toggle').hidden,events:window.selectionEntryEvents})`);
     console.log('Native selection reproduction:', JSON.stringify(observed));
     await screenshot(process.argv.includes('--expect-missing-selection-entry') ? 'document-comments-selection-before.png' : 'document-comments-selection-after.png');
     if (process.argv.includes('--expect-missing-selection-entry')) {
@@ -176,7 +209,7 @@ try {
       await click('[data-tree-path="unsupported.mdx"]'); await waitForDocument('MDX document'); await click('#mode-preview');
       await evaluate(`(() => { const node = document.querySelector('#document-content p').firstChild; const range=document.createRange(); range.setStart(node,0);range.setEnd(node,8);getSelection().removeAllRanges();getSelection().addRange(range); })()`);
       await delay(300);
-      assert.equal(await evaluate('document.querySelector("#comment-text-selection").hidden && document.querySelector("#comment-selection").hidden && document.querySelector("#add-selection-comment").hidden'),true,'unsupported MDX does not advertise a comment write');
+      assert.equal(await evaluate('document.querySelector("#comment-text-selection").hidden && document.querySelector("#document-comments-toggle").hidden && document.querySelector("#add-selection-comment").hidden'),true,'unsupported MDX does not advertise a comment write');
       console.log('PASS: native Preview/Live/Source selection, keyboard selection, stable action, exact saved anchors, composer focus, and MDX capability boundary.');
     }
   } else {
@@ -188,7 +221,7 @@ try {
     const range = document.createRange(); range.setStart(p.firstChild, 0); range.setEnd(p.firstChild, 18);
     getSelection().removeAllRanges(); getSelection().addRange(range);
   })()`);
-  await click('#comment-selection');
+  await click('#comment-text-selection-button');
   async function writeMessage(text) {
     await until(() => evaluate('!!document.querySelector("#document-comments textarea:not(:disabled)")'));
     await evaluate(`(() => { const text = document.querySelector('#document-comments textarea'); text.value = ${JSON.stringify(text)}; text.dispatchEvent(new Event('input', { bubbles: true })); text.form.requestSubmit(); })()`);
@@ -196,6 +229,8 @@ try {
   await writeMessage('Please clarify the second occurrence.');
   await until(() => evaluate('document.querySelectorAll("[data-comment-id]").length === 1 && !!document.querySelector(".comment-pin")'));
   const metadata = await evaluate('fetch("/api/document?file=README.md").then(r => r.json()).then(d => d.comments.threads[0])');
+  assert.equal(await evaluate('document.querySelector("#document-comments-toggle").getBoundingClientRect().width === document.querySelector("#document-favorite-toggle").getBoundingClientRect().width'),true,'thread counts do not widen the icon control');
+  assert.match(await evaluate('document.querySelector("#document-comments-toggle").getAttribute("aria-label")'),/1/);
   assert.equal(metadata.location.startLine, 7, 'actual selected occurrence');
   await click('[data-comment-action="locate"]');
   await writeMessage('Reply from the sidebar.');

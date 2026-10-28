@@ -2,7 +2,6 @@
 export function createDocumentComments({ getDocument, getLocale, getSelection, getTextSelection, mutate, getEditor, revealLine }) {
   const panel = document.querySelector('#document-comments');
   const toggle = document.querySelector('#document-comments-toggle');
-  const createButton = document.querySelector('#comment-selection');
   const textPopover = document.querySelector('#comment-text-selection');
   const textButton = document.querySelector('#comment-text-selection-button');
   const lineButton = document.querySelector('#add-selection-comment');
@@ -11,6 +10,7 @@ export function createDocumentComments({ getDocument, getLocale, getSelection, g
   let textSelectionScope = '';
   let textSelectionSource = '';
   let selectionFrame = null;
+  let newThreadButton = null;
   let visible = false;
   let filter = 'open';
   let draftSelection = null;
@@ -79,16 +79,18 @@ export function createDocumentComments({ getDocument, getLocale, getSelection, g
     const doc = getDocument();
     const supported = doc?.comments?.supported === true && doc.canEdit;
     if (renderedKey !== key()) { draftSelection = null; error = ''; renderedKey = key(); }
-    toggle.hidden = !supported; createButton.hidden = !supported; lineButton.hidden = !supported;
+    toggle.hidden = !supported; lineButton.hidden = !supported;
     textButton.textContent = label('添加评论', 'Add comment');
     scheduleTextSelection();
     panel.hidden = !supported || !visible;
     document.querySelector('#document-body').classList.toggle('has-comments', !panel.hidden);
     toggle.setAttribute('aria-expanded', String(!panel.hidden));
     const threads = doc?.comments?.threads ?? [];
-    toggle.textContent = `${label('评论', 'Comments')} ${threads.filter((thread) => thread.status === 'open').length}`;
-    createButton.textContent = label('添加评论', 'Add comment');
-    marks(); panel.replaceChildren();
+    const openCount = threads.filter((thread) => thread.status === 'open').length;
+    const toggleLabel = openCount ? label(`评论（${openCount} 条未解决）`, `Comments (${openCount} open)`) : label('评论', 'Comments');
+    toggle.setAttribute('aria-label', toggleLabel);
+    toggle.setAttribute('data-ui-tooltip', toggleLabel);
+    marks(); newThreadButton = null; panel.replaceChildren();
     if (panel.hidden) return;
     const header = document.createElement('header');
     const title = document.createElement('strong'); title.textContent = label('评论', 'Comments');
@@ -102,7 +104,12 @@ export function createDocumentComments({ getDocument, getLocale, getSelection, g
       tab.dataset.commentFilter = status;
       tab.setAttribute('aria-pressed', String(filter === status)); actions.append(tab);
     }
-    actions.append(button(label('新评论', 'New comment'), start)); panel.append(actions);
+    newThreadButton = button(label('新评论', 'New comment'), () => start());
+    newThreadButton.dataset.commentAction = 'create';
+    newThreadButton.disabled = busy || !getSelection();
+    newThreadButton.title = label('先选中正文文字或行号', 'Select document text or line numbers first');
+    newThreadButton.addEventListener('mousedown', (event) => event.preventDefault());
+    actions.append(newThreadButton); panel.append(actions);
     const author = document.createElement('input'); author.name = 'comment-author'; author.value = readAuthor(); author.maxLength = 128;
     author.placeholder = label('署名（默认 Local author）', 'Author (default: Local author)'); author.setAttribute('aria-label', label('评论署名', 'Comment author'));
     author.addEventListener('change', () => { try { localStorage.setItem('openglance-comment-author', author.value); } catch {} }); panel.append(author);
@@ -140,8 +147,6 @@ export function createDocumentComments({ getDocument, getLocale, getSelection, g
     if (!list.childElementCount) { const empty = document.createElement('p'); empty.className = 'comment-hint'; empty.textContent = label('这里还没有评论。', 'No comments here yet.'); list.append(empty); }
   }
   toggle.addEventListener('click', () => { visible = !visible; render(); });
-  createButton.addEventListener('mousedown', (event) => event.preventDefault());
-  createButton.addEventListener('click', () => start());
   lineButton.addEventListener('mousedown', (event) => event.preventDefault());
   lineButton.addEventListener('click', () => start());
   textButton.addEventListener('pointerdown', (event) => event.preventDefault());
@@ -154,6 +159,7 @@ export function createDocumentComments({ getDocument, getLocale, getSelection, g
     selectionFrame = null;
     const doc = getDocument();
     const scope = `${key()}:${doc?.sourceHash}`;
+    if (newThreadButton) newThreadButton.disabled = busy || !doc?.comments?.supported || !getSelection();
     if (busy || !doc?.comments?.supported || !doc.canEdit) textSelection = null;
     else if (document.activeElement !== textButton) { textSelection = getTextSelection(); textSelectionScope = scope; textSelectionSource = doc.source; }
     else if (textSelectionScope !== scope || textSelectionSource !== doc.source) textSelection = null;

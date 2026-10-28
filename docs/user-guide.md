@@ -302,12 +302,14 @@ rendered result.
 ## Discuss a passage
 
 On a `.md` document, drag to select text in Preview, Live, or Source, then click **Add comment**
-beside the selection. Keyboard selections in the editor show the same action. The top document
-**Add comment** action and selecting source line numbers also work. Preview uses the exact selection for plain paragraphs; for formatted
+beside the selection. Keyboard selections in the editor show the same action; selecting source line
+numbers also works. Preview uses the exact selection for plain paragraphs; for formatted
 or complex blocks the composer explicitly labels the paragraph or line range being discussed. Check
 that quotation before saving. MDX comments are not supported yet.
 
-The right **Comments** panel contains open threads and a **Resolved** filter. Add a reply below a
+The speech-bubble icon after **Copy share link** opens the right **Comments** panel. Its tooltip
+shows the number of open threads. The panel contains open threads and a **Resolved** filter; its
+**New comment** action becomes available after selecting document text or source lines. Add a reply below a
 thread, choose **Resolve** when the discussion is complete, or find it under **Resolved** and choose
 **Reopen**. Resolving removes that thread's marks from the body completely. Reading its resolved
 history leaves the body normal. Reopening restores the marker when the original text can still be

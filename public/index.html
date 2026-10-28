@@ -440,14 +440,18 @@
               <span class="document-deletions-toggle-mark" aria-hidden="true">ab</span>
               <span class="visually-hidden" data-document-deletions-label data-i18n="action.showDeletedChanges">显示删除内容</span>
             </button>
-            <button id="comment-selection" type="button" hidden>添加评论</button>
-            <button id="document-comments-toggle" type="button" aria-expanded="false" hidden>评论</button>
             <button id="document-favorite-toggle" class="document-favorite-toggle" type="button" aria-label="收藏文档" aria-pressed="false">
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="m12 3.6 2.55 5.17 5.7.83-4.13 4.02.98 5.68L12 16.62 6.9 19.3l.98-5.68L3.75 9.6l5.7-.83L12 3.6Z"></path>
               </svg>
             </button>
             <button id="copy-share-link" type="button" data-i18n="action.copyShareLink">复制分享链接</button>
+            <button id="document-comments-toggle" class="document-comments-toggle" type="button" aria-label="Comments" aria-controls="document-comments" aria-expanded="false" hidden>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M7 4h10a4 4 0 0 1 4 4v6a4 4 0 0 1-4 4h-6l-5 3v-3a3 3 0 0 1-3-3V8a4 4 0 0 1 4-4Z"></path>
+                <path d="M8 9h8M8 13h5"></path>
+              </svg>
+            </button>
             <button id="document-actions-more" type="button" aria-label="更多文件操作" data-i18n-aria-label="action.moreFileActions" aria-haspopup="menu" aria-expanded="false">···</button>
           </div>
           <div id="branch-status" class="branch-status" role="status" aria-live="polite" hidden></div>
