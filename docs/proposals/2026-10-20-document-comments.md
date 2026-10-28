@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-10-20
+last_updated: 2026-10-28
 ---
 
 # Proposal: Git-backed document comments
@@ -8,6 +8,11 @@ Status: proposed; reviewed with revisions. This document does not authorize or d
 feature. It is for OpenGlance product reviewers, implementers, and agents working on the file format.
 The [implementation audit](2026-10-20-document-comments-research.md) records the source revisions,
 bounded experiments, and limits behind the recommendation.
+
+The format and write-safety prototype was authorized on 2026-10-28. Its
+[results and reproducible commands](2026-10-28-document-comments-prototype.md) cover raw-file agent
+writes, source preservation, editor-state history, and cooperating Git transactions. It remains
+separate from the App; editor save compatibility and production integration gates are still open.
 
 ## Recommendation
 
@@ -328,7 +333,7 @@ continue to identify the versioned file and do not create a new access boundary.
 
 ## Existing architecture and required changes
 
-This proposal does not change the [current architecture](../architecture.md). Before implementation,
+This proposal does not change the [current architecture](../architecture.md). Before App integration,
 the Markdown interoperability contract must explicitly allow this bounded comment-record convention;
 it currently rejects private hidden metadata outside existing exceptions.
 
@@ -407,7 +412,7 @@ have been incorporated into this proposal; their implementation gates remain ope
 | Medium: hidden comments inherit repository visibility | Private-looking UI could mislead users | Describe publication scope; avoid separate permission claims |
 | Medium: one block per thread still permits Git conflicts | Two comments can require manual reconciliation | Keep ordinary conflict handling; make no conflict-free claim |
 
-## Decision before implementation
+## Decision before App integration
 
 Should version one adopt this in-file record format for `.md`, with default EOF placement, no separate
 comment permissions, and normal Git conflicts? The recommendation is yes, conditional on the prototype

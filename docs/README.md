@@ -20,7 +20,7 @@ materially improves installation, privacy, or product use.
 | Hosted link privacy | [Hosted links](hosted-links.md) · [简体中文](hosted-links.zh-CN.md) | End-user metadata disclosure |
 | Windows Preview | [English](windows-portable-guide.md) · [简体中文](windows-portable-guide.zh-CN.md) | Installation and security guidance |
 | Usage analytics | [Specification](app-usage-analytics-spec.md) | Normative event, privacy, and metric contract |
-| Document comments proposal | [Proposal](proposals/2026-10-20-document-comments.md) · [Implementation audit](proposals/2026-10-20-document-comments-research.md) | Proposed design and source evidence; not a shipped capability |
+| Document comments proposal | [Proposal](proposals/2026-10-20-document-comments.md) · [Implementation audit](proposals/2026-10-20-document-comments-research.md) · [Prototype results](proposals/2026-10-28-document-comments-prototype.md) | Proposed design, source evidence, and executable format/write experiments; not a shipped capability |
 | Official release | [Release process](release.md) | Mango Future maintainer workflow |
 
 Repository-specific agent rules remain in [AGENTS.md](../AGENTS.md). Contribution and vulnerability

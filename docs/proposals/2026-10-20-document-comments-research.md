@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-10-20
+last_updated: 2026-10-28
 ---
 
 # Document comments: implementation audit and design review evidence
@@ -9,6 +9,9 @@ It separates inspected implementations from product claims. The audit was perfor
 Git references below are pinned to the exact downloaded revisions. This is a targeted source review
 and a small set of function/parser experiments, not an installation, security audit, or full product
 acceptance test of any third-party tool.
+
+The subsequent OpenGlance [format and write-safety prototype](2026-10-28-document-comments-prototype.md)
+records executable results from 2026-10-28 separately from this pinned source audit.
 
 ## Evidence summary
 

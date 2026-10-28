@@ -24,6 +24,8 @@
     "package:win": "node scripts/release-windows.mjs package",
     "portable:win": "node scripts/release-windows.mjs portable",
     "prototype:git-sync-snapshot": "node scripts/git-sync-snapshot-prototype.mjs",
+    "prototype:document-comments": "node scripts/document-comments-prototype.mjs",
+    "test:document-comments-prototype": "node --test test/document-comments-format.test.mjs test/document-comments-store.test.mjs test/document-comments-history.test.mjs",
     "publish:updates:mac": "node scripts/release-mac.mjs publish-updates",
     "publish:updates:win": "node scripts/release-windows.mjs publish-updates",
     "release:prepare": "node scripts/release-worktree.mjs prepare",

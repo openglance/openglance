@@ -1,0 +1,50 @@
+[
+  {
+    "name": "empty body",
+    "source": "",
+    "body": "",
+    "body_hash": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "name": "revised example without final newline",
+    "source": "# Launch plan\n\nWe plan to launch on November 1.",
+    "body": "# Launch plan\n\nWe plan to launch on November 1.",
+    "body_hash": "sha256:d2779a1274a295da96ef68e3d3549561bfd348bdcf1f9743f0ad254a76c59690"
+  },
+  {
+    "name": "future record and EOF separators",
+    "source": "# Launch plan\n\nWe plan to launch on November 1.\n\n<!-- openglance-comment:v99\n{\"future\":true}\n-->\n",
+    "body": "# Launch plan\n\nWe plan to launch on November 1.\n\n",
+    "body_hash": "sha256:d2779a1274a295da96ef68e3d3549561bfd348bdcf1f9743f0ad254a76c59690"
+  },
+  {
+    "name": "CRLF normalization",
+    "source": "# Launch plan\r\n\r\nWe plan to launch on November 1.\r\n\r\n<!-- openglance-comment:v99\r\n{\"future\":true}\r\n-->\r\n",
+    "body": "# Launch plan\n\nWe plan to launch on November 1.\n\n",
+    "body_hash": "sha256:d2779a1274a295da96ef68e3d3549561bfd348bdcf1f9743f0ad254a76c59690"
+  },
+  {
+    "name": "mid-document record preserves internal blank lines",
+    "source": "# A\n\n<!-- openglance-comment:v99\n{\"future\":true}\n-->\n\n# B\n",
+    "body": "# A\n\n\n# B\n",
+    "body_hash": "sha256:161375eae792c5edcf3e5c6c29706f1c9a56fbaf647e96b4d52cb32e086ce41c"
+  },
+  {
+    "name": "malformed JSON excludes only its complete envelope",
+    "source": "# Launch plan\n\nWe plan to launch on November 1.\n\n<!-- openglance-comment:v1\n{not json}\n-->\n",
+    "body": "# Launch plan\n\nWe plan to launch on November 1.\n\n",
+    "body_hash": "sha256:d2779a1274a295da96ef68e3d3549561bfd348bdcf1f9743f0ad254a76c59690"
+  },
+  {
+    "name": "fenced examples stay in the body",
+    "source": "```md\n<!-- openglance-comment:v99\n{\"future\":true}\n-->\n```\n",
+    "body": "```md\n<!-- openglance-comment:v99\n{\"future\":true}\n-->\n```\n",
+    "body_hash": "sha256:90afc963dfe44dab0100104a2e3c76bda489a2c936bcbd2857c6834b934b5246"
+  },
+  {
+    "name": "Unicode and CR normalization",
+    "source": "甲😀\r\n乙\r丙\n",
+    "body": "甲😀\n乙\n丙\n",
+    "body_hash": "sha256:84f09ee415879760ef82e8b27808ba2a62e47c2f39c0d69ec05097a71e020913"
+  }
+]
