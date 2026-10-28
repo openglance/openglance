@@ -573,8 +573,10 @@ const documentComments = createDocumentComments({
   getDocument: () => state.currentDocument,
   getLocale: () => state.locale,
   getEditor: () => state.sourceEditor,
-  getSelection: () => selectedCommentRange({ source: state.currentDocument?.source ?? "", mode: state.mode,
-    editor: state.sourceEditor, lines: state.selectedLines, root: documentContent }),
+  getSelection: () => currentTextCommentSelection()?.selection ?? selectedCommentRange({
+    source: state.currentDocument?.source ?? "", mode: "preview", lines: state.selectedLines, root: documentContent, selection: null,
+  }),
+  getTextSelection: currentTextCommentSelection,
   revealLine: (line) => { selectSourceRange(line, line); scrollToHashSelectedLine(); },
   mutate: async (input) => {
     const request = currentDocumentRequest();
@@ -608,6 +610,27 @@ const documentComments = createDocumentComments({
     }
   },
 });
+
+function currentTextCommentSelection() {
+  const doc = state.currentDocument;
+  if (!doc?.comments?.supported || !canEditCurrentDocument() || state.commentWriteInFlight || state.selectedLines.size) return null;
+  if (document.activeElement?.closest("#document-comments, input, textarea")) return null;
+  const native = window.getSelection();
+  if (!documentContent.hidden && native?.rangeCount && !native.isCollapsed) {
+    const range = native.getRangeAt(0);
+    if (documentContent.contains(range.startContainer) && documentContent.contains(range.endContainer)) {
+      const selection = selectedCommentRange({ source: doc.source, mode: "preview", lines: [], root: documentContent, selection: native });
+      const rect = [...range.getClientRects()].filter((item) => item.height > 0 && item.bottom > 0 && item.top < window.innerHeight).at(-1);
+      return selection?.text.trim() && rect ? { selection, rect } : null;
+    }
+  }
+  if (isEditorMode() && state.sourceEditor?.hasFocus()) {
+    const selection = selectedCommentRange({ source: doc.source, mode: state.mode, editor: state.sourceEditor, lines: [], selection: null });
+    const rect = state.sourceEditor.selectionRect();
+    return selection?.text.trim() && rect ? { selection, rect } : null;
+  }
+  return null;
+}
 
 const linkPreviewController = attachLinkPreviews({
   containers: [documentContent, sourceEditorHost],
@@ -3749,6 +3772,7 @@ function ensureSourceEditor() {
     locale: state.locale,
     onChange: scheduleSourceSync,
     onFocusChange: handleSourceEditorFocusChange,
+    onSelectionChange: () => documentComments.selectionChanged(),
     onScroll: handleSourceEditorScroll,
     onLineSelect: selectSourceLine,
     onBlankClick: clearLineSelection,

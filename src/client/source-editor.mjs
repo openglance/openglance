@@ -1141,6 +1141,7 @@ export function createSourceEditor({
   language,
   onChange,
   onFocusChange,
+  onSelectionChange,
   onScroll,
   onLineSelect,
   onBlankClick,
@@ -1236,6 +1237,7 @@ export function createSourceEditor({
         if (update.focusChanged) {
           onFocusChange?.(update.view.hasFocus);
         }
+        if (update.selectionSet || update.docChanged || update.focusChanged) onSelectionChange?.();
         if (!update.docChanged || suppressChange) {
           return;
         }
@@ -1498,6 +1500,10 @@ export function createSourceEditor({
     },
     hasFocus() {
       return view.hasFocus;
+    },
+    selectionRect() {
+      const range = view.state.selection.main;
+      return range.empty ? null : view.coordsAtPos(range.to) ?? view.coordsAtPos(range.from);
     },
     selectedRange() {
       const { from, to } = view.state.selection.main;

@@ -81,6 +81,7 @@ try {
   git(["init", "-b", "main"]); git(["config", "user.name", "Comment smoke"]); git(["config", "user.email", "smoke@example.invalid"]);
   const original = "# Comment smoke\n\nRepeated paragraph for review.\n\nSecond section.\n\nRepeated paragraph for review.\n";
   writeFileSync(path.join(fixture, "README.md"), original);
+  writeFileSync(path.join(fixture, "unsupported.mdx"), "# MDX document\n\nComments are not enabled for MDX documents.\n");
   git(["add", "."]); git(["commit", "-m", "Initial"]); const originalHead = git(["rev-parse", "HEAD"]);
   const portServer = createServer(); await new Promise((resolve) => portServer.listen(0, "127.0.0.1", resolve));
   const port = portServer.address().port; await new Promise((resolve) => portServer.close(resolve));
@@ -104,6 +105,81 @@ try {
   }, 240000);
   assert.equal(realpathSync(isolatedAppProcess().executable), realpathSync(path.join(userData, "Applications", "OpenGlance.app", "Contents", "MacOS", "OpenGlance")));
   await waitForDocument("Comment smoke"); await click('#mode-preview');
+  if (process.argv.includes('--selection-entry')) {
+    await evaluate(`(() => {
+      window.selectionEntryEvents = [];
+      const target = [...document.querySelectorAll('#document-content p')].filter(node => node.textContent.includes('Repeated paragraph')).at(-1);
+      window.selectionEntryOriginalNode = target;
+      for (const type of ['selectionchange', 'pointerup', 'mouseup', 'click']) document.addEventListener(type, () => {
+        window.selectionEntryEvents.push({ type, text: getSelection()?.toString(), connected: window.selectionEntryOriginalNode.isConnected,
+          lineSelections: document.querySelectorAll('[data-source-line].is-selected').length, linePopoverHidden: document.querySelector('#selection-popover').hidden });
+      });
+    })()`);
+    const point = await evaluate(`(() => { const node = window.selectionEntryOriginalNode.firstChild; const range = document.createRange(); range.setStart(node, 0); range.setEnd(node, 18); const rect = range.getBoundingClientRect(); return {from:rect.left+1,to:rect.right-1,y:rect.top+rect.height/2}; })()`);
+    await cdp('Input.dispatchMouseEvent', {type:'mousePressed',button:'left',clickCount:1,x:point.from,y:point.y});
+    for (let i=1;i<=8;i++) await cdp('Input.dispatchMouseEvent', {type:'mouseMoved',button:'left',buttons:1,x:point.from+(point.to-point.from)*i/8,y:point.y});
+    await cdp('Input.dispatchMouseEvent', {type:'mouseReleased',button:'left',clickCount:1,x:point.to,y:point.y});
+    await until(() => evaluate('getSelection()?.toString().length > 5'));
+    await delay(500);
+    const observed = await evaluate(`({selected:getSelection().toString(),connected:window.selectionEntryOriginalNode.isConnected,
+      linePopoverHidden:document.querySelector('#selection-popover').hidden,
+      floatingCommentVisible:!!document.querySelector('#comment-text-selection:not([hidden])'),
+      toolbarCommentVisible:!document.querySelector('#comment-selection').hidden,events:window.selectionEntryEvents})`);
+    console.log('Native selection reproduction:', JSON.stringify(observed));
+    await screenshot(process.argv.includes('--expect-missing-selection-entry') ? 'document-comments-selection-before.png' : 'document-comments-selection-after.png');
+    if (process.argv.includes('--expect-missing-selection-entry')) {
+      assert.equal(observed.linePopoverHidden, true); assert.equal(observed.floatingCommentVisible, false);
+      console.log('REPRODUCED: selecting body text does not reveal a contextual comment action.');
+    } else {
+      assert.equal(observed.floatingCommentVisible, true, 'native text selection must reveal a contextual comment action');
+      await click('#comment-text-selection-button');
+      await until(() => evaluate('!!document.querySelector("#document-comments .comment-new textarea")'));
+      assert.equal(await evaluate('document.querySelector(".comment-new blockquote").textContent'), observed.selected);
+      assert.equal(await evaluate('document.querySelector("#comment-text-selection").hidden'), true, 'composer input must not show a body-selection action');
+      async function saveSelectionComment(text) {
+        await evaluate(`(() => { const text = document.querySelector('.comment-new textarea'); text.value = ${JSON.stringify(text)}; text.dispatchEvent(new Event('input',{bubbles:true})); text.form.requestSubmit(); })()`);
+        await until(() => evaluate('!document.querySelector(".comment-new") && !!document.querySelector("[data-comment-action=resolve]:not(:disabled)")'));
+      }
+      await saveSelectionComment('Preview selection entry.');
+      for (const mode of ['live', 'source']) {
+        await click('#document-comments-toggle');
+        await click(`#mode-${mode}`);
+        const point = await evaluate(`(() => { const lines = [...document.querySelectorAll('.cm-content .cm-line')].filter(node => node.textContent === 'Repeated paragraph for review.'); const line = lines.at(-1); line.scrollIntoView({block:'nearest'}); const walk = document.createTreeWalker(line, NodeFilter.SHOW_TEXT); let node; while(node=walk.nextNode()) if(node.textContent.startsWith('Repeated paragraph')) { const range = document.createRange(); range.setStart(node,0); range.setEnd(node,18); const rect=range.getBoundingClientRect(); return {from:rect.left+1,to:rect.right-1,y:rect.top+rect.height/2}; } })()`);
+        assert.ok(point, `rendered body text is selectable in ${mode}`);
+        await cdp('Input.dispatchMouseEvent', {type:'mousePressed',button:'left',clickCount:1,x:point.from,y:point.y});
+        for (let i=1;i<=8;i++) await cdp('Input.dispatchMouseEvent', {type:'mouseMoved',button:'left',buttons:1,x:point.from+(point.to-point.from)*i/8,y:point.y});
+        await cdp('Input.dispatchMouseEvent', {type:'mouseReleased',button:'left',clickCount:1,x:point.to,y:point.y});
+        await until(() => evaluate('!document.querySelector("#comment-text-selection").hidden'));
+        if (mode === 'live') {
+          const stable = await evaluate(`new Promise(resolve => { let samples=0; const timer=setInterval(() => { if(document.querySelector('#comment-text-selection').hidden) { clearInterval(timer);resolve(false); } else if(++samples===105) {clearInterval(timer);resolve(true);} },100); })`);
+          assert.equal(stable,true,'a stationary Live selection keeps its comment action visible for at least ten seconds');
+        } else {
+          await cdp('Input.dispatchKeyEvent', {type:'keyDown',key:'ArrowRight',code:'ArrowRight'});
+          await cdp('Input.dispatchKeyEvent', {type:'keyUp',key:'ArrowRight',code:'ArrowRight'});
+          await until(() => evaluate('document.querySelector("#comment-text-selection").hidden'));
+          for (let i=0;i<5;i++) {
+            await cdp('Input.dispatchKeyEvent', {type:'keyDown',key:'ArrowLeft',code:'ArrowLeft',modifiers:8});
+            await cdp('Input.dispatchKeyEvent', {type:'keyUp',key:'ArrowLeft',code:'ArrowLeft',modifiers:0});
+          }
+          await until(() => evaluate('!document.querySelector("#comment-text-selection").hidden'));
+        }
+        await screenshot(`document-comments-selection-${mode}.png`);
+        await click('#comment-text-selection-button');
+        await until(() => evaluate('!!document.querySelector(".comment-new textarea")'));
+        const quote=await evaluate('document.querySelector(".comment-new blockquote").textContent');
+        assert.equal(quote, mode === 'live' ? 'Repeated paragraph' : 'graph', `the ${mode} quote uses the selected range`);
+        await saveSelectionComment(`${mode} selection entry.`);
+      }
+      const saved = await evaluate('fetch("/api/document?file=README.md").then(r=>r.json()).then(d=>d.comments.threads)');
+      assert.equal(saved.length,3); assert.ok(saved.every(thread=>thread.location.startLine===7));
+      assert.equal(git(['rev-parse','HEAD']),originalHead); assert.equal(git(['diff','--cached']),'');
+      await click('[data-tree-path="unsupported.mdx"]'); await waitForDocument('MDX document'); await click('#mode-preview');
+      await evaluate(`(() => { const node = document.querySelector('#document-content p').firstChild; const range=document.createRange(); range.setStart(node,0);range.setEnd(node,8);getSelection().removeAllRanges();getSelection().addRange(range); })()`);
+      await delay(300);
+      assert.equal(await evaluate('document.querySelector("#comment-text-selection").hidden && document.querySelector("#comment-selection").hidden && document.querySelector("#add-selection-comment").hidden'),true,'unsupported MDX does not advertise a comment write');
+      console.log('PASS: native Preview/Live/Source selection, keyboard selection, stable action, exact saved anchors, composer focus, and MDX capability boundary.');
+    }
+  } else {
   await evaluate(`(() => {
     window.commentSmokeRequests = [];
     const originalFetch = window.fetch;
@@ -172,6 +248,7 @@ try {
   await until(() => evaluate('document.querySelectorAll(".comment-message").length === 3'));
   await screenshot('document-comments-final.png');
   console.log('PASS: Preview and Live lifecycle, second-occurrence selection, resolved body cleanup, persistent file state, Agent reply + Source Undo, no commit/publish.');
+  }
 } catch (error) {
   if (target && exitCode == null) { console.error('Comment smoke state:', await evaluate('({url:location.href,errors:window.commentSmokeErrors,error:document.querySelector("[role=alert]")?.textContent,focus:document.activeElement?.outerHTML.slice(0,250),sync:document.querySelector("#source-sync-status")?.textContent,inert:document.querySelector("#source-editor-pane").inert,posts:window.commentSmokeRequests,resources:performance.getEntriesByType("resource").filter(r=>r.responseStatus>=400).map(r=>({url:r.name,status:r.responseStatus})), body:document.body.innerText.slice(0,600)})').catch(() => null)); await screenshot('document-comments-failure.png').catch(() => {}); }
   throw error;

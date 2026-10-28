@@ -1,9 +1,16 @@
 // The panel owns transient drafts; persisted threads always come from the document file.
-export function createDocumentComments({ getDocument, getLocale, getSelection, mutate, getEditor, revealLine }) {
+export function createDocumentComments({ getDocument, getLocale, getSelection, getTextSelection, mutate, getEditor, revealLine }) {
   const panel = document.querySelector('#document-comments');
   const toggle = document.querySelector('#document-comments-toggle');
   const createButton = document.querySelector('#comment-selection');
+  const textPopover = document.querySelector('#comment-text-selection');
+  const textButton = document.querySelector('#comment-text-selection-button');
+  const lineButton = document.querySelector('#add-selection-comment');
   const drafts = new Map();
+  let textSelection = null;
+  let textSelectionScope = '';
+  let textSelectionSource = '';
+  let selectionFrame = null;
   let visible = false;
   let filter = 'open';
   let draftSelection = null;
@@ -58,8 +65,9 @@ export function createDocumentComments({ getDocument, getLocale, getSelection, m
     form.append(text, send); form.addEventListener('submit', (event) => { event.preventDefault(); if (text.value.trim()) void onSubmit(text.value, draftKey); });
     parent.append(form);
   }
-  function start() {
-    const selection = getSelection(); visible = true; filter = 'open';
+  function start(selection = getSelection()) {
+    textPopover.hidden = true;
+    visible = true; filter = 'open';
     if (selection) { draftSelection = { ...selection, key: key(), hash: getDocument().sourceHash, source: getDocument().source.replace(/\r\n?/g, '\n') }; error = ''; }
     else error = label('请先选择正文文字或行号，再添加评论。', 'Select document text or line numbers before adding a comment.');
     render(); panel.querySelector('textarea')?.focus();
@@ -71,7 +79,9 @@ export function createDocumentComments({ getDocument, getLocale, getSelection, m
     const doc = getDocument();
     const supported = doc?.comments?.supported === true && doc.canEdit;
     if (renderedKey !== key()) { draftSelection = null; error = ''; renderedKey = key(); }
-    toggle.hidden = !supported; createButton.hidden = !supported;
+    toggle.hidden = !supported; createButton.hidden = !supported; lineButton.hidden = !supported;
+    textButton.textContent = label('添加评论', 'Add comment');
+    scheduleTextSelection();
     panel.hidden = !supported || !visible;
     document.querySelector('#document-body').classList.toggle('has-comments', !panel.hidden);
     toggle.setAttribute('aria-expanded', String(!panel.hidden));
@@ -131,10 +141,41 @@ export function createDocumentComments({ getDocument, getLocale, getSelection, m
   }
   toggle.addEventListener('click', () => { visible = !visible; render(); });
   createButton.addEventListener('mousedown', (event) => event.preventDefault());
-  createButton.addEventListener('click', start);
-  document.querySelector('#add-selection-comment').addEventListener('mousedown', (event) => event.preventDefault());
-  document.querySelector('#add-selection-comment').addEventListener('click', start);
-  return { render, clear: () => { visible = false; draftSelection = null; clearMarks(); render(); } };
+  createButton.addEventListener('click', () => start());
+  lineButton.addEventListener('mousedown', (event) => event.preventDefault());
+  lineButton.addEventListener('click', () => start());
+  textButton.addEventListener('pointerdown', (event) => event.preventDefault());
+  textButton.addEventListener('mousedown', (event) => event.preventDefault());
+  textButton.addEventListener('click', () => {
+    if (textSelection && textSelectionScope === `${key()}:${getDocument()?.sourceHash}` && textSelectionSource === getDocument()?.source) start(textSelection.selection);
+    else start();
+  });
+  function updateTextSelection() {
+    selectionFrame = null;
+    const doc = getDocument();
+    const scope = `${key()}:${doc?.sourceHash}`;
+    if (busy || !doc?.comments?.supported || !doc.canEdit) textSelection = null;
+    else if (document.activeElement !== textButton) { textSelection = getTextSelection(); textSelectionScope = scope; textSelectionSource = doc.source; }
+    else if (textSelectionScope !== scope || textSelectionSource !== doc.source) textSelection = null;
+    const rect = textSelection?.rect;
+    if (!rect || rect.bottom <= 0 || rect.top >= window.innerHeight) { textPopover.hidden = true; return; }
+    textButton.textContent = label('添加评论', 'Add comment');
+    textPopover.hidden = false;
+    const width = textPopover.offsetWidth;
+    const height = textPopover.offsetHeight;
+    const position = commentPopoverPosition(rect, { width, height, viewportWidth: window.innerWidth, viewportHeight: window.innerHeight });
+    textPopover.style.left = `${position.left}px`;
+    textPopover.style.top = `${position.top}px`;
+  }
+  function scheduleTextSelection() {
+    if (selectionFrame === null) selectionFrame = window.requestAnimationFrame(updateTextSelection);
+  }
+  document.addEventListener('selectionchange', scheduleTextSelection);
+  document.addEventListener('pointerup', scheduleTextSelection);
+  document.addEventListener('keyup', scheduleTextSelection);
+  document.addEventListener('scroll', scheduleTextSelection, true);
+  window.addEventListener('resize', scheduleTextSelection);
+  return { render, selectionChanged: scheduleTextSelection, clear: () => { visible = false; draftSelection = null; clearMarks(); render(); } };
 }
 
 export function selectedCommentRange({ source, mode, editor, lines, root, selection = globalThis.getSelection?.() }) {
@@ -167,4 +208,12 @@ export function selectedCommentRange({ source, mode, editor, lines, root, select
   let to = offsets[selectedLines.at(-1)] ?? source.length;
   if (source[to - 1] === '\n') to--;
   return Number.isInteger(from) && to > from ? { from, to, text: source.slice(from, to), fallback: true } : null;
+}
+
+export function commentPopoverPosition(rect, { width, height, viewportWidth, viewportHeight }) {
+  const padding = 8;
+  const left = Math.max(padding, Math.min(rect.right - width, viewportWidth - width - padding));
+  const preferred = rect.top - height - padding;
+  const top = Math.max(padding, Math.min(preferred >= 46 ? preferred : rect.bottom + padding, viewportHeight - height - padding));
+  return { left, top };
 }

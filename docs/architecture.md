@@ -541,7 +541,10 @@ attributed UTC-stamped messages. Locations are derived from the normalized body 
 back to complete-source coordinates. Multiple matching passages are not guessed. HTTP selections use
 LF-normalized full-source UTF-16 offsets, including the actual occurrence selected by the user. Preview
 uses exact mapping only where rendered text matches its source; otherwise the composer explicitly
-labels a source-backed paragraph/line range. Source and Live use CodeMirror selection offsets.
+labels a source-backed paragraph/line range. Source and Live use CodeMirror selection offsets. Native
+selection events and CodeMirror selection/focus transactions update a contextual comment action without
+writing source. Its pointer action preserves the selection, and its cached target is scoped to the
+current document and source version. Sidebar inputs and unsupported document kinds do not expose it.
 
 Only recognized record envelopes are masked from Preview and Live presentation. The mask preserves
 physical newlines and source provenance. Code examples, lists, frontmatter, and HTML containers are

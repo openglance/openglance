@@ -5844,3 +5844,9 @@ tr:last-child td {
 
 .preview-pane:has(.document-body.has-comments) .floating-document-actions { right: 336px; }
 @media (max-width: 1050px) { .preview-pane:has(.document-body.has-comments) .floating-document-actions { right: 16px; } .document-comments { padding-top: 58px; } }
+
+.comment-text-selection { position: fixed; z-index: 50; padding: 4px; border: 1px solid var(--panel-border); border-radius: 8px; background: var(--panel); box-shadow: var(--shadow-md); }
+.comment-text-selection[hidden] { display: none; }
+.comment-text-selection button { min-height: 30px; padding: 0 12px; border: 0; border-radius: 5px; color: var(--accent-text); background: var(--accent-soft); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.comment-text-selection button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media print { .comment-text-selection { display: none !important; } }

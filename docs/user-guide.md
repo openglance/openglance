@@ -301,8 +301,9 @@ rendered result.
 
 ## Discuss a passage
 
-On a `.md` document, select text in Preview, Live, or Source and click **Add comment**. Selecting
-source line numbers also works. Preview uses the exact selection for plain paragraphs; for formatted
+On a `.md` document, drag to select text in Preview, Live, or Source, then click **Add comment**
+beside the selection. Keyboard selections in the editor show the same action. The top document
+**Add comment** action and selecting source line numbers also work. Preview uses the exact selection for plain paragraphs; for formatted
 or complex blocks the composer explicitly labels the paragraph or line range being discussed. Check
 that quotation before saving. MDX comments are not supported yet.
 
