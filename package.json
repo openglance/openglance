@@ -63,7 +63,7 @@
   },
   "devDependencies": {
     "@electron/packager": "^20.0.2",
-    "electron": "43.2.0",
+    "electron": "43.8.1",
     "esbuild": "^0.28.1",
     "mermaid": "11.16.0"
   }
