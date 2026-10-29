@@ -4,6 +4,22 @@ OpenGlance follows Semantic Versioning for its shared app version. Git tags iden
 official public artifacts, signatures, checksums, and platform availability are authoritative only on
 the [OpenGlance download page](https://gitleaf.mangofuture.com/download).
 
+## 3.4.0 — 2026-10-30 (internal release)
+
+### Added
+
+- Added local Markdown comments from text or line selections in Preview, Live, and Source, with
+  replies, resolve/reopen actions, and a right-side Comments panel. Discussions stay in the document
+  until explicitly published through Sync and publish.
+- Added document title and repository-path context to hosted link previews, with redundant titles
+  omitted and an option to exclude preview titles.
+
+### Changed
+
+- Reduced idle filesystem scans through repository-tree caching and less frequent reading checks,
+  while preserving current-file events, editor freshness checks, and manual refresh.
+- Simplified comment controls and restored normal document presentation for resolved discussions.
+
 ## 3.3.0 — 2026-09-16 (internal release)
 
 ### Added
