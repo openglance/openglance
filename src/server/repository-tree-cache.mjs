@@ -44,8 +44,12 @@ export function createRepositoryTreeCache({
       // by each request, while index/ignore changes can alter discovery or kinds.
       const gitPath = file.slice(5);
       if (["index", "info/exclude", "config"].includes(gitPath)) discoveryDirty = true;
-    } else if (knownPaths.has(file) || discoveredPaths.has(file) || knownDirectories.has(file)) {
+    } else if (knownPaths.has(file) || discoveredPaths.has(file)) {
       dirty = true;
+    } else if (knownDirectories.has(file)) {
+      // Directory notifications can describe ignored child creation (notably on
+      // Windows). Reconcile membership before deciding to rescan visible files.
+      discoveryDirty = true;
     } else if (pendingPaths.size < MAX_PENDING_PATHS) {
       pendingPaths.add(file);
     } else {

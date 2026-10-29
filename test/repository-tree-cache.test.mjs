@@ -99,6 +99,35 @@ test("ignored build churn never causes file stat/title scans, but ignore-rule ed
   assert.equal((await f.cache.get()).find(n => n.name === "build").children.length, 20);
 });
 
+test("directory notifications reconcile discovery without rescanning ignored children", async t => {
+  let notify;
+  const f = await fixture(t, {
+    watchFn: (_root, _options, listener) => {
+      notify = listener;
+      return new EventEmitter();
+    },
+  });
+  await mkdir(path.join(f.root, "docs"));
+  await writeFile(path.join(f.root, "docs", "reference.md"), "# Reference\n");
+  await f.cache.get();
+  const idleBuilds = f.builds();
+  await mkdir(path.join(f.root, "docs", "build"));
+  await writeFile(path.join(f.root, "docs", "build", "output.md"), "# Ignored\n");
+  notify("change", "docs");
+  notify("rename", "docs\\build");
+  const unchanged = await f.cache.get();
+  assert.equal(unchanged.find(n => n.name === "docs").children.length, 1);
+  assert.equal(f.builds(), idleBuilds);
+
+  await writeFile(path.join(f.root, "docs", "new.md"), "# New document\n");
+  notify("change", "docs");
+  assert.equal((await f.cache.get()).find(n => n.name === "docs").children.length, 2);
+  assert.equal(f.builds(), idleBuilds + 1);
+  await rm(path.join(f.root, "docs"), { recursive: true });
+  notify("rename", "docs");
+  assert.equal((await f.cache.get()).find(n => n.name === "docs"), undefined);
+});
+
 test("a changed HEAD refreshes clean content even without a watcher event", async t => {
   const f = await fixture(t, { watchFn: () => new EventEmitter().setMaxListeners(0) });
   const head = async () => (await f.git(["rev-parse", "HEAD"])).stdout.trim();
