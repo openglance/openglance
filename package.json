@@ -58,7 +58,7 @@
     "@codemirror/view": "^6.43.4",
     "codemirror": "^6.0.2",
     "extract-zip": "^2.0.1",
-    "markdown-it": "^14.3.0",
+    "markdown-it": "^14.3.3",
     "undici": "7.29.0"
   },
   "devDependencies": {
